@@ -26,8 +26,10 @@ static size_t last_len = 0;
 static size_t last_cap = 0;
 static char last_capture_id[24] = "";
 static char last_trigger[8] = "";
+static char last_captured_at[32] = "";  // 빈 문자열이면 미동기화 → 헤더 생략
 
-static void keep_last(const uint8_t *jpg, size_t len, const char *capture_id, const char *trigger) {
+static void keep_last(const uint8_t *jpg, size_t len, const char *capture_id, const char *captured_at,
+                      const char *trigger) {
   if (len > last_cap) {
     free(last_jpg);
     last_jpg = (uint8_t *)ps_malloc(len);
@@ -41,6 +43,7 @@ static void keep_last(const uint8_t *jpg, size_t len, const char *capture_id, co
   last_len = len;
   strncpy(last_capture_id, capture_id, sizeof last_capture_id - 1);
   strncpy(last_trigger, trigger, sizeof last_trigger - 1);
+  strncpy(last_captured_at, captured_at ? captured_at : "", sizeof last_captured_at - 1);
 }
 
 static void print_summary(const char *id, const char *trig, size_t len, int w, int h, uint32_t cap_ms,
@@ -62,6 +65,8 @@ static void capture_and_send(const DetectResult &d) {
   uint32_t cap_ms = 0;
   camera_fb_t *fb = camera_capture_hires(&cap_ms);
   if (!fb) return;
+  char captured_at[32];
+  const char *ts = net_time_iso(captured_at, sizeof captured_at) ? captured_at : nullptr;  // 촬영 순간 시각
   if (!proto_jpeg_ok(fb->buf, fb->len)) {
     Serial.printf("[cap] skip: bad jpeg (len=%u)\n", (unsigned)fb->len);
     camera_release_hires(fb);
@@ -70,8 +75,8 @@ static void capture_and_send(const DetectResult &d) {
   }
   char capture_id[24];
   proto_capture_id(capture_id, sizeof capture_id, boot_rand, ++seq);
-  keep_last(fb->buf, fb->len, capture_id, d.trigger);
-  UploadResult u = uploader_send(fb->buf, fb->len, capture_id, d.trigger, d.score);
+  keep_last(fb->buf, fb->len, capture_id, ts, d.trigger);
+  UploadResult u = uploader_send(fb->buf, fb->len, capture_id, ts, d.trigger, d.score);
   print_summary(capture_id, d.trigger, fb->len, fb->width, fb->height, cap_ms, u);
   camera_release_hires(fb);
   cooldown_until_ms = millis() + COOLDOWN_MS;
@@ -86,7 +91,8 @@ static void resend_last() {
     Serial.println("[cap] skip: no wifi");
     return;
   }
-  UploadResult u = uploader_send(last_jpg, last_len, last_capture_id, last_trigger, -1.0f);
+  UploadResult u = uploader_send(last_jpg, last_len, last_capture_id, last_captured_at[0] ? last_captured_at : nullptr,
+                                 last_trigger, -1.0f);
   print_summary(last_capture_id, last_trigger, last_len, 0, 0, 0, u);
 }
 

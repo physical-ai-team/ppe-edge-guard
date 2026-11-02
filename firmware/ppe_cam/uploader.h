@@ -10,5 +10,7 @@ struct UploadResult {
   char event_id[72];   // 202/200 응답의 event_id, 없으면 빈 문자열
 };
 
-// score < 0 이면 X-Detector-Score 생략. 재시도 때 capture_id는 그대로 쓴다.
-UploadResult uploader_send(const uint8_t *jpg, size_t len, const char *capture_id, const char *trigger, float score);
+// captured_at: 촬영 순간의 UTC ISO 8601 (NTP 미동기화면 nullptr → X-Captured-At 생략)
+// score < 0 이면 X-Detector-Score 생략. 재시도 때 capture_id·captured_at은 그대로 쓴다.
+UploadResult uploader_send(const uint8_t *jpg, size_t len, const char *capture_id, const char *captured_at,
+                           const char *trigger, float score);

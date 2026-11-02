@@ -3,12 +3,11 @@
 #include <Arduino.h>
 #include <HTTPClient.h>
 
-#include "net.h"
 #include "proto.h"
 #include "settings.h"
 
-static int post_once(const uint8_t *jpg, size_t len, const char *capture_id, const char *trigger, float score,
-                     long *retry_after_s, String *body) {
+static int post_once(const uint8_t *jpg, size_t len, const char *capture_id, const char *captured_at,
+                     const char *trigger, float score, long *retry_after_s, String *body) {
   HTTPClient http;
   char url[96];
   snprintf(url, sizeof url, "http://%s:%d/api/v1/captures", GATEWAY_HOST, GATEWAY_PORT);
@@ -22,8 +21,7 @@ static int post_once(const uint8_t *jpg, size_t len, const char *capture_id, con
   http.addHeader("X-Device-Id", DEVICE_ID);
   http.addHeader("X-Device-Token", DEVICE_TOKEN);
   http.addHeader("X-Capture-Id", capture_id);
-  char ts[32];
-  if (net_time_iso(ts, sizeof ts)) http.addHeader("X-Captured-At", ts);  // 미동기화면 생략 (계약)
+  if (captured_at) http.addHeader("X-Captured-At", captured_at);  // 미동기화면 생략 (계약)
   if (trigger) http.addHeader("X-Trigger", trigger);
   if (score >= 0) {
     char sc[8];
@@ -43,13 +41,14 @@ static int post_once(const uint8_t *jpg, size_t len, const char *capture_id, con
   return code;
 }
 
-UploadResult uploader_send(const uint8_t *jpg, size_t len, const char *capture_id, const char *trigger, float score) {
+UploadResult uploader_send(const uint8_t *jpg, size_t len, const char *capture_id, const char *captured_at,
+                           const char *trigger, float score) {
   UploadResult r = {};
   uint32_t start = millis();
   for (uint32_t attempt = 0; attempt <= PROTO_MAX_RETRIES; attempt++) {
     long retry_after = -1;
     String body;
-    r.code = post_once(jpg, len, capture_id, trigger, score, &retry_after, &body);
+    r.code = post_once(jpg, len, capture_id, captured_at, trigger, score, &retry_after, &body);
     r.tries = attempt + 1;
     SendAction action = proto_classify(r.code);
     if (action == SendAction::Success) {
