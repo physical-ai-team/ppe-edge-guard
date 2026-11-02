@@ -91,3 +91,27 @@ PC에 g++(MinGW, 예: `winget install BrechtSanders.WinLibs.POSIX.UCRT`)가 필�
 | 4 | `docker compose stop ingest` 후 `c` | `tries=4`로 포기, 그 뒤 `c`도 정상 동작 |
 | 5 | 부팅 직후 `r` | `nothing to resend` |
 | 6 | `DETECTOR_TIMER_MS 15000`으로 업로드 | 15초마다 `trig=timer` |
+
+### 실기 시험 결과 (2026-11-02, XIAO ESP32S3 + OV3660, 노트북 ingest mock)
+
+보드는 공유기 2.4GHz(`iptime_ipsbi`), 노트북은 같은 공유기 5GHz에 연결(같은 192.168.0.x면 대역이 달라도 된다).
+
+| # | 결과 |
+|---|---|
+| 1 | ✅ `code=202`, `trigger: serial`, 1280×1024, `captured_at` = 촬영 순간, `clock_synced=true` |
+| 2 | ✅ `code=200`, 같은 `event_id` |
+| 3 | ✅ `code=401 (no retry)`, 본문 `invalid_token` |
+| 4 | ✅ `tries=4`로 포기(`send=47016ms` = 타임아웃 10 s×4 + 대기 1+2+4 s, 계약대로). ingest 재시작 후 `r` → 202, `captured_at`은 처음 촬영 시각 유지. 그 뒤 `c`도 202 |
+| 5 | ✅ `nothing to resend` |
+| 6 | ✅ 15초마다 `trig=timer`, 202 |
+
+| 측정 | 값 |
+|---|---|
+| SXGA JPEG 크기 | 40~50 KB (7장: 40.4~49.8 KB) |
+| `cap` (QVGA→SXGA 전환 + 촬영) | 223~242 ms |
+| `send` (202, 연결 안정 후) | 214~1291 ms. 부팅 직후 첫 전송 3~4.6 s |
+| `send` (중복 200) | 609~746 ms |
+| RSSI | -58 ~ -80 dBm |
+
+- 해상도 전환은 7장 모두 1280×1024로 정상, 멈춤 없음.
+- 신호가 약하면(-75 dBm 이하) 부팅 때 15초 안에 Wi-Fi가 안 붙을 수 있다. 이후 자동 재연결로 붙는다. 그 사이 `E wifi:sta is connecting, return error` 로그는 무해하다.
