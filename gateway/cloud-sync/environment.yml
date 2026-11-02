@@ -1,0 +1,12 @@
+name: ppe-cloud-sync
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - supabase>=2.4
+  - httpx>=0.27
+  - pydantic-settings>=2.2
+  - fastapi>=0.110      # /healthz 전용
+  - uvicorn>=0.29
+  # test
+  - pytest>=8

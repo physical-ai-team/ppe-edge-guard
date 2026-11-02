@@ -1,0 +1,11 @@
+# Windows에서 작성 → 라즈베리파이(Linux)에서 실행하므로 줄바꿈을 LF로 고정
+* text=auto eol=lf
+
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.onnx binary
+*.zip binary
