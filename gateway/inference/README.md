@@ -4,7 +4,7 @@ JPEG 바이트를 받아 안전모·조끼 착용 여부를 판정하는 무상�
 
 ```
 POST /infer   (body: JPEG, 헤더 X-Event-Id 선택) → persons / detections / summary
-GET  /healthz → {"status":"ok","model_loaded":true,"model_version":"...","imgsz":416}
+GET  /healthz → {"status":"ok","model_loaded":true,"model_version":"...","imgsz":640}
 ```
 
 | 코드 | 경우 |
@@ -43,14 +43,14 @@ GET  /healthz → {"status":"ok","model_loaded":true,"model_version":"...","imgs
 
 모델 파일 준비 (ppe-training 환경, 처음 한 번):
 ```powershell
-python training/export_hf_model.py       # gateway/models/yolov8n-ppehf-416-v1.onnx (기본값)
+python training/export_hf_model.py       # gateway/models/yolov8n-ppehf-640-v1.onnx (기본값)
 python training/export_coco_model.py     # gateway/models/yolov8n-coco-416-v1.onnx (사람만)
 ```
 
 **conda로 직접 실행** (디버깅이 빠름):
 ```powershell
 cd gateway/inference
-$env:MODEL_PATH="../models/yolov8n-ppehf-416-v1.onnx"; $env:MODEL_CLASSES="../models/classes.yaml"; $env:PYTHONPATH=".;../common"
+$env:MODEL_PATH="../models/yolov8n-ppehf-640-v1.onnx"; $env:MODEL_CLASSES="../models/classes.yaml"; $env:PYTHONPATH=".;../common"
 conda run -n ppe-inference --no-capture-output uvicorn app.main:create_app --factory --port 8001
 ```
 

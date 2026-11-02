@@ -50,11 +50,11 @@ XIAO ESP32S3 (사람 감지 → 고해상도 JPEG)
 |---|---|---|---|---|---|
 | G1 | 김세광 | `feat/gateway-ingest` | **최우선.** ingest 컨테이너, compose(ingest), `INFERENCE_MODE=mock`, `fake_esp32.py` | 팀원 노트북에서 `docker compose up ingest`를 실행하고 `fake_esp32.py`로 전송하면 202 응답이 오고, `/api/v1/events/{id}`에서 상태 전이가 확인됨 | ✅ 완료 (PR #3) |
 | F1 | 박민성 | `feat/firmware-capture` | 감지 인터페이스 + 임시 감지(타이머/시리얼), 고해상도 촬영, ① 형식으로 전송, 쿨다운, 재연결, 재시도 | `arduino-cli compile` 성공. G1 이후 노트북 ingest로 202 수신 | ⏳ |
-| I1 | 김정윤 | `feat/inference-service` | inference 컨테이너, 공개 사전학습 모델(COCO yolov8n 416), `classes.yaml`, ② 형식 응답 | 노트북에서 단독으로 `curl /infer` 시 계약 형식 응답. 계약 테스트 통과 | 🔄 PR 리뷰 중 (compose 연동은 김세광 확인 대기, `gateway/inference/README.md`) |
+| I1 | 김정윤 | `feat/inference-service` | inference 컨테이너, 공개 사전학습 모델(COCO yolov8n 416), `classes.yaml`, ② 형식 응답 | 노트북에서 단독으로 `curl /infer` 시 계약 형식 응답. 계약 테스트 통과 | ✅ 완료 (PR #10). compose 연동은 김세광 확인 대기 (`gateway/inference/README.md`) |
 | S1 | 조아람 | `feat/supabase-schema` | `violations` 테이블, private 버킷, RLS, Storage 정책, Auth, `seed.sql` | RLS 확인 체크리스트 통과 (dev-testing.md) | 🔄 PR 리뷰 중 (개발 프로젝트 적용·RLS 체크리스트 통과) |
 | W1 | 조아람 | `feat/web-dashboard` | 로그인, 목록, Realtime, signed URL 사진, GitHub Pages 배포 | seed와 수동 insert가 실시간으로 표시됨 | ⏳ (S1 이후) |
 | G2 | 김세광 | `feat/gateway-cloud-sync` | cloud-sync, `SYNC_MODE=dry_run`, 재시도·백오프 | dry_run 통과 후 개발 Supabase에 실제 업로드 | 🔄 dry_run 완료·PR 리뷰 중 (실업로드는 S1 이후) |
-| T1 | 김정윤 | `feat/training-ppe` | Colab 노트북(Roboflow, Colab Secrets), ONNX 416 export, `validate_onnx.py`, 정확도·속도 측정 | 시나리오별 정답률 보고, 모델을 Drive로 공유 | ⏳ |
+| T1 | 김정윤 | `feat/training-ppe` | Colab 노트북(Roboflow, Colab Secrets), ONNX 640 export, `validate_onnx.py`, 정확도·속도 측정 | 시나리오별 정답률 보고, 모델을 Drive로 공유 | ⏳ |
 | F2 | 박민성 | `feat/firmware-edge-impulse` | EI 데이터 수집·학습, `detector_ei`, EI 라이브러리 설치 문서화 | 실기에서 사람 감지 시 촬영·전송 | ⏳ (F1 이후) |
 | V1 | 이기태 | — | 시나리오 5종 검증·시연 영상 (dev-testing.md의 촬영 가이드) | 공유 드라이브에 시나리오별 업로드 | ⏳ |
 
@@ -90,10 +90,13 @@ XIAO ESP32S3 (사람 감지 → 고해상도 JPEG)
   - 사진 폴더가 `LOCAL_IMAGE_MAX_MB`를 넘으면 디버그 보관 착용자 사진, 업로드 완료 위반 사진 순서로 오래된 것부터 삭제한다.
   - `pending_upload`·`upload_failed` 사진은 절대 삭제하지 않는다. 용량이 넘쳐도 경고 로그만 남긴다.
 - **모델:**
-  - YOLOv8n, 입력 416. 데이터셋은 Roboflow "Construction Site Safety"다.
+  - YOLOv8n, **입력 640**. 데이터셋은 Roboflow "Construction Site Safety"다.
+    - 416에서 640으로 변경(2026-11-02). 시나리오 영상 평가에서 416은 안전모 미착용을 한 번도 잡지 못했다(0/56 프레임). 640은 27/56 프레임을 잡았다. 근거는 `gateway/models/README.md`에 있다.
+    - Pi 5 속도는 김세광이 측정해서 확인한다.
+  - T1 학습 전까지는 공개 PPE 모델 `yolov8n-ppehf-640-v1`을 쓴다.
   - Colab에서 Roboflow API 키는 Colab Secrets(`ROBOFLOW_API_KEY`)에서 읽는다.
   - inference는 응답에서 클래스를 정규화 이름 5종(`person` `helmet` `no_helmet` `vest` `no_vest`)으로 바꾼다. 모델별 매핑은 이름 기준으로 `models/classes.yaml`에 둔다.
-  - 모델 버전 이름은 `yolov8n-ppe-416-v1` 형식이고, ONNX 파일명과 같다.
+  - 모델 버전 이름은 `yolov8n-ppe-640-v1` 형식(`{아키텍처}-{데이터}-{입력크기}-v{번호}`)이고, ONNX 파일명과 같다.
   - 착용 여부를 판단할 수 없는 `unknown`은 위반이 아니다. 대신 `unknown_helmet_count`·`unknown_vest_count`를 기록한다. 모든 이벤트의 통계는 ingest 로컬 SQLite에 남기고 `GET /api/v1/stats`로 조회한다. Supabase에는 위반 건만 올라간다.
 - **이미지 처리:** OpenCV를 쓰지 않는다. 전처리는 numpy + Pillow로 한다.
 - **Supabase 보안:**

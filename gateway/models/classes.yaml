@@ -2,7 +2,7 @@
 # docs/interfaces.md "정규화 클래스 이름" 참고. 매핑은 인덱스가 아니라 이름 기준이다.
 #
 # inference는 MODEL_PATH 파일명(확장자 제외)을 키로 models 아래 항목을 찾는다.
-#   /models/yolov8n-ppehf-416-v1.onnx → models.yolov8n-ppehf-416-v1
+#   /models/yolov8n-ppehf-640-v1.onnx → models.yolov8n-ppehf-640-v1
 # 키 = model_version = 응답의 model_version.
 #
 # 원본 클래스 이름·순서는 ONNX 메타데이터(ultralytics export)에서 읽는다.
@@ -22,8 +22,8 @@ matching:
 models:
   # 공개 PPE 모델 (Hugging Face, MIT). Roboflow "Construction Site Safety" 10클래스와 같은 이름·순서.
   # 출처: https://huggingface.co/Hansung-Cho/yolov8-ppe-detection @ ac0027bd38bc
-  # 생성: python training/export_hf_model.py [--imgsz 640]
-  # 원 모델은 imgsz 640으로 학습됨(30 epochs). 팀 기준 416으로 export해서 쓴다. 640은 비교용.
+  # 생성: python training/export_hf_model.py [--imgsz 416]
+  # 원 모델은 imgsz 640으로 학습됨(30 epochs). 640을 쓴다(2026-11-02 결정). 416은 비교용.
   yolov8n-ppehf-416-v1:
     source_names: &ppehf_names
       - Hardhat

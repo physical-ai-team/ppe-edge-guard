@@ -6,8 +6,8 @@
 - 결과: gateway/models/{model_version}.onnx
 
 실행 (ppe-training 환경):
-    python training/export_hf_model.py
-    python training/export_hf_model.py --imgsz 640 --version yolov8n-ppehf-640-v1
+    python training/export_hf_model.py               # → yolov8n-ppehf-640-v1.onnx (기본값)
+    python training/export_hf_model.py --imgsz 416   # → yolov8n-ppehf-416-v1.onnx (비교용)
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ def download() -> Path:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--imgsz", type=int, default=416)
+    ap.add_argument("--imgsz", type=int, default=640)
     ap.add_argument("--version", default=None, help="기본값: yolov8n-ppehf-{imgsz}-v1")
     ap.add_argument("--classes", type=Path, default=MODELS_DIR / "classes.yaml")
     args = ap.parse_args()
