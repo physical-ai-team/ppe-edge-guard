@@ -13,6 +13,15 @@ python -m http.server 5500                       # http://localhost:5500
 
 `index.html` 을 더블클릭으로 열면 ES module 이 막히므로 반드시 서버로 연다.
 
+## 배포 (GitHub Pages)
+
+`main` 에 `web/` 변경이 머지되면 [.github/workflows/pages.yml](../.github/workflows/pages.yml) 이 자동 배포한다.
+`config.js` 는 gitignore 라서 workflow 가 URL·publishable 키로 만들어 넣는다.
+
+- 주소: https://physical-ai-team.github.io/ppe-edge-guard/
+- 수동 재배포: GitHub > Actions > "Deploy web to Pages" > Run workflow
+- 처음 한 번 (레포 관리자): Settings > Pages > Source = **GitHub Actions**
+
 ## 기능
 
 - 이메일/비밀번호 로그인 (Supabase Auth, 가입 차단 — 계정은 Studio 에서 생성)
