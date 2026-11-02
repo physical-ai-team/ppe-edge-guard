@@ -6,11 +6,11 @@ inference 컨테이너에 `/models`(읽기 전용)로 마운트되는 폴더. �
 
 | 파일 | 설명 |
 |---|---|
-| `yolov8n-coco-416-v1.onnx` | COCO 사전학습 YOLOv8n, 입력 416. 사람만 감지 (트랙 I1 임시) |
-| `yolov8n-ppehf-416-v1.onnx` | 공개 PPE 모델(Hugging Face) export, 입력 416. 아래 참고 |
+| `yolov8n-coco-416-v1.onnx` | COCO 사전학습 YOLOv8n, 입력 416. 사람만 감지. `python training/export_coco_model.py` |
+| `yolov8n-ppehf-416-v1.onnx` | 공개 PPE 모델(Hugging Face) export, 입력 416. **현재 `.env.example` 기본값.** 아래 참고 |
 | `yolov8n-ppehf-640-v1.onnx` | 위와 같은 모델, 입력 640 (비교용) |
 | `yolov8n-ppe-416-v1.onnx` | Roboflow Construction Site Safety로 직접 학습, 입력 416 (트랙 T1) |
-| `classes.yaml` | 모델별 원본 클래스 이름 → 정규화 5종 매핑. 키 = `model_version` |
+| `classes.yaml` | 모델별 원본 클래스 이름 → 정규화 5종 매핑 + 사람별 판정 규칙(`matching`). 키 = `model_version` |
 
 I1에서는 COCO 사전학습 모델로 먼저 동작을 확인하고, T1에서 학습한 모델로 교체한다. `.env`의 `MODEL_PATH`만 바꾸면 된다.
 
@@ -37,9 +37,9 @@ python training/export_hf_model.py --imgsz 640   # → yolov8n-ppehf-640-v1.onnx
 ```powershell
 python training/validate_onnx.py gateway/models/yolov8n-ppehf-416-v1.onnx <사진들.jpg> --compare gateway/models/yolov8n-ppehf-416-v1.onnx
 ```
-numpy + Pillow 전처리(letterbox)·NMS 구현이 ultralytics와 같은 결과를 내는지 비교한다.
+inference 서비스 코드(`gateway/inference/app`)로 실행해서 사람별 판정까지 출력하고, ultralytics와 같은 검출 결과가 나오는지 비교한다.
 
-> **전처리 주의 (inference 구현 시):** 리사이즈는 OpenCV `INTER_LINEAR`와 같은 bilinear(안티앨리어싱 없음)여야 한다. Pillow `resize(BILINEAR)`는 축소 시 안티앨리어싱을 해서 결과가 크게 달라진다(같은 사진에서 박스 3개 → 10개). `training/validate_onnx.py`의 `resize_bilinear`·`letterbox`를 그대로 가져다 쓴다.
+> **전처리 주의 (inference 구현 시):** 리사이즈는 OpenCV `INTER_LINEAR`와 같은 bilinear(안티앨리어싱 없음)여야 한다. Pillow `resize(BILINEAR)`는 축소 시 안티앨리어싱을 해서 결과가 크게 달라진다(같은 사진에서 박스 3개 → 10개). 구현은 `gateway/inference/app/yolo.py`에 있다.
 
 > **입력 크기 주의:** 원 모델은 640으로 학습됐다. 416으로 쓰면 멀리 있는 사람·작은 안전모를 놓치는 경우가 많다. 정확도와 Pi 속도를 보고 416/640 중 결정한다(아래 표).
 
