@@ -9,9 +9,9 @@
 
 | 도구 | 역할 | 제공자 / 브랜치 | 사용자 |
 |---|---|---|---|
-| ingest `INFERENCE_MODE=mock` | inference 없이 시나리오별 가짜 결과를 생성 | 김세광 / `feat/gateway-ingest` ⏳ | 김세광, 박민성 |
+| ingest `INFERENCE_MODE=mock` | inference 없이 시나리오별 가짜 결과를 생성 | 김세광 / `feat/gateway-ingest` ✅ | 김세광, 박민성 |
 | ingest `MOCK_SCENARIO` | `both_worn` `helmet_only` `vest_only` `none_worn` `no_person` `random` 중 선택 | 위와 동일 | |
-| `gateway/scripts/fake_esp32.py` | ESP32 대신 ①번 요청을 그대로 전송 (폴더의 jpg 순회, 간격·장치ID 지정) | 김세광 / `feat/gateway-ingest` ⏳ | 김세광, 김정윤 |
+| `gateway/scripts/fake_esp32.py` | ESP32 대신 ①번 요청을 그대로 전송 (폴더의 jpg 순회, 간격·장치ID 지정, `--resend` 중복, `--no-captured-at` NTP 없음, `--wait` 결과 확인) | 김세광 / `feat/gateway-ingest` ✅ | 김세광, 김정윤, 박민성 |
 | cloud-sync `SYNC_MODE=dry_run` | Supabase 대신 `/data/sync-dryrun/`에 사진과 JSON을 기록 | 김세광 / `feat/gateway-cloud-sync` ⏳ | 김세광 |
 | `supabase/seed.sql` | 가짜 위반 기록 몇 건 (웹 화면 개발용) | 조아람 / `feat/supabase-schema` ⏳ | 조아람 |
 | 공개 사전학습 ONNX (`yolov8n` COCO, 416) | PPE 모델 완성 전에 inference 동작 확인용. 사람만 감지하며 helmet/vest는 `unknown` | 김정윤 / `feat/inference-service` ⏳ | 김정윤, 김세광 |
@@ -26,12 +26,13 @@
    arduino-cli compile --fqbn <FQBN> firmware/ppe_cam
    ```
 2. **실제 전송 테스트 (Pi 없이 노트북을 게이트웨이로 사용)**
-   - `feat/gateway-ingest`가 머지되면 노트북에서 다음을 실행한다.
+   - 노트북에서 다음을 실행한다(자세한 내용은 [gateway/ingest/README.md](../gateway/ingest/README.md)).
      ```powershell
      cd gateway; Copy-Item .env.example .env
      # .env: INFERENCE_MODE=mock, DEVICE_TOKEN=dev-token
-     docker compose up ingest
+     docker compose up --build ingest
      ```
+   - ESP32 없이 먼저 노트북 안에서 확인한다: `python scripts/fake_esp32.py --count 3 --wait`
    - `ipconfig`로 노트북 IP를 확인하고 `secrets.h`의 `GATEWAY_HOST`에 넣는다.
    - **같은 Wi-Fi**에 연결해야 한다. 학교·회사 Wi-Fi는 기기 간 통신 차단(client isolation)이나 WPA2-Enterprise 때문에 안 되는 경우가 많다. 이럴 때는 **휴대폰 핫스팟**을 쓴다.
    - Windows 방화벽에서 8000번 포트 인바운드를 허용해야 할 수 있다. 관리자 PowerShell에서 실행한다.

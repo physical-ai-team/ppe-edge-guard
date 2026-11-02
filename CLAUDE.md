@@ -42,13 +42,13 @@ XIAO ESP32S3 (사람 감지 → 고해상도 JPEG)
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | 0-1 | 레포 구조, CLAUDE.md, conda 환경, .gitignore/.env.example | ✅ 완료 (PR #1) |
-| 0-2 | 팀 역할, 브랜치 규칙, `docs/interfaces.md` **v1.0 확정**, 단독 테스트 가이드, CODEOWNERS | 🔄 `feat/stage1-team-plan` PR 리뷰 중 |
+| 0-2 | 팀 역할, 브랜치 규칙, `docs/interfaces.md` **v1.0 확정**, 단독 테스트 가이드, CODEOWNERS | ✅ 완료 (PR #2) |
 
-### 1. 병렬 트랙 (인터페이스 v1.0 기준으로 동시에 진행)
+### 1. 병렬 트랙 (인터페이스 v1.x 기준으로 동시에 진행)
 
 | 트랙 | 담당 | 브랜치 | 내용 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
-| G1 | 김세광 | `feat/gateway-ingest` | **최우선.** ingest 컨테이너, compose(ingest), `INFERENCE_MODE=mock`, `fake_esp32.py` | 팀원 노트북에서 `docker compose up ingest`를 실행하고 `fake_esp32.py`로 전송하면 202 응답이 오고, `/api/v1/events/{id}`에서 상태 전이가 확인됨 | ⏳ 다음 작업 |
+| G1 | 김세광 | `feat/gateway-ingest` | **최우선.** ingest 컨테이너, compose(ingest), `INFERENCE_MODE=mock`, `fake_esp32.py` | 팀원 노트북에서 `docker compose up ingest`를 실행하고 `fake_esp32.py`로 전송하면 202 응답이 오고, `/api/v1/events/{id}`에서 상태 전이가 확인됨 | 🔄 PR 리뷰 중 |
 | F1 | 박민성 | `feat/firmware-capture` | 감지 인터페이스 + 임시 감지(타이머/시리얼), 고해상도 촬영, ① 형식으로 전송, 쿨다운, 재연결, 재시도 | `arduino-cli compile` 성공. G1 이후 노트북 ingest로 202 수신 | ⏳ |
 | I1 | 김정윤 | `feat/inference-service` | inference 컨테이너, 공개 사전학습 모델(COCO yolov8n 416), `classes.yaml`, ② 형식 응답 | 노트북에서 단독으로 `curl /infer` 시 계약 형식 응답. 계약 테스트 통과 | ⏳ |
 | S1 | 조아람 | `feat/supabase-schema` | `violations` 테이블, private 버킷, RLS, Storage 정책, Auth, `seed.sql` | RLS 확인 체크리스트 통과 (dev-testing.md) | ⏳ |
@@ -127,12 +127,29 @@ arduino-cli compile --fqbn <FQBN> firmware/ppe_cam
 arduino-cli upload  --fqbn <FQBN> -p <PORT> firmware/ppe_cam   # <PORT>는 각자 확인. 하드코딩 금지
 ```
 
-### 게이트웨이 (G1 이후 확정)
+### 게이트웨이
 ```powershell
-cd gateway; Copy-Item .env.example .env   # 값 채우기
-docker compose up -d --build               # 전체
-docker compose up ingest                    # 단독 (INFERENCE_MODE=mock)
+cd gateway; Copy-Item .env.example .env    # 값 채우기 (단독 테스트: DEVICE_TOKEN=dev-token, INFERENCE_MODE=mock)
+docker compose up -d --build                # 전체 (현재 ingest만 있음)
+docker compose up --build ingest            # ingest 단독, 로그 보기
+docker compose logs -f ingest
+docker compose down                         # 정지 (데이터 유지) / down -v: 데이터 볼륨까지 삭제
+
+# 가짜 ESP32 전송 (ppe-ingest 환경)
+conda run -n ppe-ingest python scripts/fake_esp32.py --count 3 --wait
+curl.exe http://localhost:8000/api/v1/stats
 ```
+
+### 테스트 (서비스 폴더에서)
+```powershell
+cd gateway/ingest; conda run -n ppe-ingest python -m pytest -q
+```
+
+### gateway Python 코드 구조
+- 서비스 코드는 `gateway/<service>/app/`, 공용 코드는 `gateway/common/ppe_common/`(SQLite outbox 스키마, 상태 상수, 시각·경로 규칙)에 둔다.
+- import 경로는 Docker에서 `PYTHONPATH=/app`이고, 공용 코드는 `/app/ppe_common`에 복사된다. 로컬에서는 `PYTHONPATH=..\common`으로 맞춘다. 테스트는 `pytest.ini`의 `pythonpath`로 처리한다.
+- Dockerfile 빌드 컨텍스트는 `gateway/`다. 이미지는 `mambaorg/micromamba:2.0.5`를 쓰고 `mambauser`로 실행한다.
+- 이벤트 상태 전이: `received → inferring → compliant | pending_upload → uploaded`, 영구 오류는 `infer_failed`. 정의는 `ppe_common/db.py`에 있다.
 
 ## 규칙
 
