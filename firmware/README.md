@@ -40,10 +40,54 @@ powershell -File firmware/tests/run_tests.ps1    # ALL PASS 가 나와야 한다
 ```
 PC에 g++(MinGW, 예: `winget install BrechtSanders.WinLibs.POSIX.UCRT`)가 필요하다. 한글 사용자 폴더 PC 우회도 스크립트에 들어 있다.
 
-## 시리얼 출력
+## 시리얼 명령·출력
 
-115200bps. 10초마다 상태 한 줄:
+115200bps. 줄바꿈 설정은 상관없다.
+
+| 입력 | 동작 |
+|---|---|
+| `c` | 지금 SXGA로 한 장 찍어 전송 (`X-Trigger: serial`) |
+| `r` | 마지막 사진을 **같은 `X-Capture-Id`로** 다시 전송 → ingest가 `200`(중복)을 돌려줘야 정상 |
+
+`config.h`의 `DETECTOR_TIMER_MS`를 0보다 크게 하면 그 주기마다 자동으로 찍는다(`X-Trigger: timer`).
+촬영 후 `COOLDOWN_MS`(기본 5초) 동안은 다음 촬영을 건너뛴다.
+
+촬영 한 번에 요약 한 줄:
+```
+[cap] id=5e1a9c02-000042 trig=serial size=184322B 1280x1024 cap=412ms send=903ms code=202 event=cam-01_20261102T053112Z_a1b2c3 tries=1
+```
+- `cap`: 해상도 전환 + 버리는 프레임 + 촬영에 걸린 시간 / `send`: 전송(재시도 대기 포함)
+- `code`: 마지막 HTTP 코드. 음수는 네트워크 오류(-1 연결 거부, -11 타임아웃)
+- 4xx면 재시도하지 않고 응답 본문을 `[up] code=401 (no retry) body=...`로 출력한다
+- 네트워크 오류·5xx는 1s → 2s → 4s 간격으로 최대 3번 더 시도한다(503은 `Retry-After`를 최대 4초까지 따름)
+
+10초마다 상태 한 줄:
 ```
 [net] wifi=connected rssi=-58 time=2026-11-02T05:31:12Z
 ```
-`time=unsynced`면 NTP가 아직 안 됐다는 뜻이다(인터넷 없는 핫스팟 등). 이때는 `X-Captured-At` 헤더를 보내지 않는다.
+`time=unsynced`면 NTP가 아직 안 됐다는 뜻이다(인터넷 없는 핫스팟 등). 이때는 `X-Captured-At` 헤더를 보내지 않고, ingest가 `clock_synced=false`로 기록한다.
+
+## 노트북 ingest로 실기 시험 (Pi 없이)
+
+[docs/dev-testing.md](../docs/dev-testing.md) 박민성 절과 같다.
+
+1. 노트북에서 ingest 띄우기
+   ```powershell
+   cd gateway; Copy-Item .env.example .env
+   # .env: DEVICE_TOKEN=dev-token, INFERENCE_MODE=mock
+   docker compose up -d --build ingest
+   curl.exe http://localhost:8000/healthz      # {"status":"ok","inference_mode":"mock"}
+   ```
+2. `ipconfig`로 노트북 IP를 보고 `secrets.h`의 `GATEWAY_HOST`에 넣는다. 보드와 노트북은 **같은 Wi-Fi**(학교 Wi-Fi는 기기 간 통신이 막혀 있는 경우가 많으니 휴대폰 핫스팟 권장).
+3. Windows 방화벽 8000 인바운드 허용(관리자 PowerShell, 한 번만):
+   `New-NetFirewallRule -DisplayName "ppe-ingest 8000" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow`
+4. 업로드 후 시리얼에서 확인할 것
+
+| # | 할 일 | 기대 결과 |
+|---|---|---|
+| 1 | `c` | `code=202`, `event=cam-…`. `curl.exe http://localhost:8000/api/v1/events/<event>` → `trigger: serial`, `image.width: 1280` |
+| 2 | `r` | `code=200` (중복) |
+| 3 | `secrets.h` 토큰을 `wrong`으로 바꿔 업로드 후 `c` | `code=401 tries=1`, 응답 본문 출력 |
+| 4 | `docker compose stop ingest` 후 `c` | `tries=4`로 포기, 그 뒤 `c`도 정상 동작 |
+| 5 | 부팅 직후 `r` | `nothing to resend` |
+| 6 | `DETECTOR_TIMER_MS 15000`으로 업로드 | 15초마다 `trig=timer` |
