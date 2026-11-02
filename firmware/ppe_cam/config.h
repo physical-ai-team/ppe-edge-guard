@@ -30,6 +30,31 @@
 #define DETECTOR_TIMER_MS 0  // 0이면 꺼짐. 예: 15000 → 15초마다 자동 촬영 (X-Trigger: timer)
 #endif
 
+// F2 사람 감지 (Edge Impulse). 0이면 detector_manual(시리얼·타이머), 1이면 detector_ei
+#ifndef DETECTOR_EI
+#define DETECTOR_EI 0
+#endif
+
+#ifndef EI_HEADER
+#define EI_HEADER <ppe-person-fomo_inferencing.h>  // EI에서 내보낸 Arduino 라이브러리 헤더
+#endif
+
+#ifndef PERSON_THRESHOLD
+#define PERSON_THRESHOLD 0.4f  // FOMO person 점수 기준. 놓치는 것보다 오탐이 낫다(Pi가 거름)
+#endif
+
+#ifndef DETECT_INTERVAL_MS
+#define DETECT_INTERVAL_MS 200  // 감지 프레임 추론 간격
+#endif
+
+#ifndef DETECT_CONSECUTIVE
+#define DETECT_CONSECUTIVE 2  // 연속 몇 번 넘어야 촬영할지 (한 프레임 오탐 거르기)
+#endif
+
+#ifndef DETECT_DEBUG
+#define DETECT_DEBUG 0  // 1이면 추론마다 점수·시간 출력
+#endif
+
 #ifndef HTTP_TIMEOUT_MS
 #define HTTP_TIMEOUT_MS 10000  // 계약값
 #endif
