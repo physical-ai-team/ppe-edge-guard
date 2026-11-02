@@ -28,11 +28,19 @@ timedatectl | sed 's/^/  /'
 
 section "메모리·디스크"
 free -h | sed 's/^/  /'
+if grep -qw memory /sys/fs/cgroup/cgroup.controllers 2>/dev/null; then
+  ok "memory cgroup 사용 가능 (compose mem_limit 적용됨)"
+else
+  warn "memory cgroup 꺼짐 — mem_limit 무시, docker stats 메모리 0B. docs/deploy_raspberry_pi.md 3단계 'memory cgroup 켜기' 참고"
+fi
 df -h / | sed 's/^/  /'
 docker system df 2>/dev/null | sed 's/^/  /'
 
 section "네트워크 (ESP32 펌웨어의 GATEWAY_HOST로 쓸 주소)"
-hostname -I | tr ' ' '\n' | grep -E '^[0-9]+\.' | sed 's/^/  /'
+# 기본 경로의 출발 주소 = LAN IP (docker0·compose 브리지 주소는 제외된다)
+lan_ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i=="src") print $(i+1)}')"
+[ -n "$lan_ip" ] && printf '  %s (%s)\n' "$lan_ip" "$(ip -4 route get 1.1.1.1 | awk '{for (i=1;i<=NF;i++) if ($i=="dev") print $(i+1)}')" \
+  || warn "기본 경로 없음 — 네트워크 연결 확인"
 
 section "Docker"
 if command -v docker >/dev/null; then
@@ -40,6 +48,10 @@ if command -v docker >/dev/null; then
   docker compose version | sed 's/^/  /'
   (cd "$GATEWAY_DIR" && docker compose ps --format 'table {{.Service}}\t{{.Status}}') | sed 's/^/  /'
   docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' | sed 's/^/  /'
+  for c in $(cd "$GATEWAY_DIR" && docker compose ps -q); do
+    limit=$(docker inspect -f '{{.HostConfig.Memory}}' "$c")
+    [ "$limit" = "0" ] && warn "$(docker inspect -f '{{.Name}}' "$c" | tr -d /) 메모리 제한 없음 — cgroup 설정 후 docker compose up -d --force-recreate"
+  done
 else
   warn "docker 없음 — 문서 3단계 참고"
 fi

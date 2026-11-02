@@ -7,7 +7,7 @@
   같은 .onnx를 주면 전처리·후처리 구현이 ultralytics와 같은지 검사된다.
 
 실행 (ppe-training 환경):
-    python training/validate_onnx.py gateway/models/yolov8n-ppehf-416-v1.onnx <사진.jpg> [<사진2.jpg> ...]
+    python training/validate_onnx.py gateway/models/yolov8n-ppehf-640-v1.onnx <사진.jpg> [<사진2.jpg> ...]
     python training/validate_onnx.py <onnx> <사진.jpg> --compare <onnx>
 """
 
