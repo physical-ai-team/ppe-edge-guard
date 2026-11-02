@@ -42,9 +42,9 @@ XIAO ESP32S3 (사람 감지 → 고해상도 JPEG)
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | 0-1 | 레포 구조, CLAUDE.md, conda 환경, .gitignore/.env.example | ✅ 완료 (PR #1) |
-| 0-2 | 팀 역할, 브랜치 규칙, `docs/interfaces.md` 초안, 단독 테스트 가이드, CODEOWNERS | 🔄 `feat/stage1-team-plan`: **인터페이스 팀 확정 대기** |
+| 0-2 | 팀 역할, 브랜치 규칙, `docs/interfaces.md` **v1.0 확정**, 단독 테스트 가이드, CODEOWNERS | 🔄 `feat/stage1-team-plan` PR 리뷰 중 |
 
-### 1. 병렬 트랙 (인터페이스 v1.0 확정 후 동시에 진행)
+### 1. 병렬 트랙 (인터페이스 v1.0 기준으로 동시에 진행)
 
 | 트랙 | 담당 | 브랜치 | 내용 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
@@ -74,6 +74,11 @@ XIAO ESP32S3 (사람 감지 → 고해상도 JPEG)
   - 결과가 위반이면 `pending_upload`, 아니면 `compliant`로 기록한다.
   - cloud-sync가 `pending_upload`를 폴링해서 업로드한다. 성공하면 `uploaded`, 실패하면 지수 백오프로 재시도한다.
   - SQLite(WAL)는 named volume `gateway-data`에 둔다. Windows bind mount에서는 파일 잠금이 불안정하므로 bind mount를 쓰지 않는다.
+- **시각:**
+  - 모든 시각은 UTC로 다룬다. DB와 Storage 경로도 UTC이고, KST 변환은 웹 화면 표시에서만 한다.
+  - `captured_at`(ESP32 NTP 시각), `received_at`(ingest 수신 시각), `detected_at`(추론 완료 시각)을 따로 기록한다.
+  - ESP32 시각이 없거나 이상하면 `captured_at`에 `received_at`을 쓰고 `clock_synced=false`로 표시한다.
+- **촬영 해상도**는 계약으로 고정하지 않는다. 펌웨어 설정값(`CAPTURE_FRAMESIZE`)으로 두고 기본값은 SXGA다.
 - **멱등성:**
   - ESP32는 `X-Capture-Id`를 보내고, ingest가 이 값으로 중복을 제거한다.
   - `event_id`는 ingest가 만든다. Supabase `violations.event_id`는 unique다.
@@ -86,11 +91,14 @@ XIAO ESP32S3 (사람 감지 → 고해상도 JPEG)
 - **모델:**
   - YOLOv8n, 입력 416. 데이터셋은 Roboflow "Construction Site Safety"다.
   - Colab에서 Roboflow API 키는 Colab Secrets(`ROBOFLOW_API_KEY`)에서 읽는다.
-  - inference는 응답에서 클래스를 정규화 이름 5종(`person` `helmet` `no_helmet` `vest` `no_vest`)으로 바꾼다. 모델별 매핑은 `models/classes.yaml`에 둔다.
+  - inference는 응답에서 클래스를 정규화 이름 5종(`person` `helmet` `no_helmet` `vest` `no_vest`)으로 바꾼다. 모델별 매핑은 이름 기준으로 `models/classes.yaml`에 둔다.
+  - 모델 버전 이름은 `yolov8n-ppe-416-v1` 형식이고, ONNX 파일명과 같다.
+  - 착용 여부를 판단할 수 없는 `unknown`은 위반이 아니다. 대신 `unknown_helmet_count`·`unknown_vest_count`를 기록한다. 모든 이벤트의 통계는 ingest 로컬 SQLite에 남기고 `GET /api/v1/stats`로 조회한다. Supabase에는 위반 건만 올라간다.
 - **이미지 처리:** OpenCV를 쓰지 않는다. 전처리는 numpy + Pillow로 한다.
 - **Supabase 보안:**
   - Storage 버킷 `violation-images`는 private이다.
   - 웹은 anon 키 + 이메일/비밀번호 로그인으로 `authenticated` 역할만 읽는다. 사진은 signed URL로 표시한다.
+  - `violations.persons`는 jsonb로 저장한다(웹에서 박스 오버레이용).
   - 쓰기 정책은 없다. service_role 키는 Pi `.env`의 cloud-sync와 김세광의 개발 `.env`에서만 쓴다.
 - **컨테이너 공통:**
   - 베이스 이미지는 `mambaorg/micromamba`(amd64/arm64)이고, 각 서비스의 `environment.yml`을 그대로 사용한다.

@@ -1,6 +1,6 @@
-# 서비스 간 인터페이스 계약 (v0.1 초안)
+# 서비스 간 인터페이스 계약 (v1.0)
 
-> **상태: 초안 — 팀 확인 전.** 아래 "확정 필요 사항"에 대해 담당자들이 합의하면 v1.0으로 올리고, 그 이후 변경은 영향받는 담당자 전원의 PR 승인이 필요하다.
+> **상태: 확정 (2026-11-02, 팀 합의).** 이후 변경은 영향받는 담당자 전원의 PR 승인이 필요하다. 계약 변경 PR이 먼저 머지된 뒤 코드 변경을 올린다. 버전 규칙: 필드 추가 = 마이너(v1.1), 필드 삭제·의미 변경 = 메이저(v2.0).
 
 이 문서는 담당자들이 **서로의 코드나 라즈베리파이 없이 병렬 개발**할 수 있도록 경계를 고정한다. 구현은 자유지만, 아래 형식은 지켜야 한다.
 
@@ -17,25 +17,69 @@
 
 | 항목 | 규칙 |
 |---|---|
-| 시각 | 항상 **UTC, ISO 8601**, 초 단위 `Z` 접미사. 예: `2026-11-02T05:31:12Z`. 표시용 KST 변환은 웹에서만 |
+| 시각 | 전송·DB·Storage 경로 모두 **UTC, ISO 8601**, 초 단위 `Z` 접미사. 예: `2026-11-02T05:31:12Z`. **KST 변환은 웹 화면 표시에서만** |
+| 시각 종류 | `captured_at` = ESP32 촬영 시각(NTP) / `received_at` = ingest 수신 시각 / `detected_at` = 추론 완료 시각. 세 값은 각각 따로 기록한다 |
 | `device_id` | 정규식 `^[a-z0-9-]{3,32}$`. 예: `cam-01`, `cam-minsung` (개발용 개인 장치는 이름 접미사 권장) |
 | `event_id` | ingest가 생성. `{device_id}_{YYYYMMDDTHHMMSSZ}_{hex6}` 예: `cam-01_20261102T053112Z_a1b2c3`. 사람이 읽을 수 있고 시간순 정렬됨. 전 구간에서 이 값을 그대로 전달 |
 | 박스 좌표 | **원본 이미지 픽셀 좌표**, `[x1, y1, x2, y2]` 정수 (좌상단, 우하단) |
 | 이미지 | JPEG만. 바이트가 `FF D8`로 시작해야 함 |
 
-### 정규화 클래스 이름 (canonical classes)
+### 정규화 클래스 이름 (canonical classes) — 확정 5종
 
-모델마다 클래스 이름이 다르므로(Roboflow는 `NO-Hardhat`, COCO는 `person` 등) **inference가 아래 5개 이름으로 정규화해서 응답**한다. 모델별 매핑은 `gateway/models/classes.yaml`(김정윤 관리)에 둔다.
+모델마다 클래스 이름이 다르다(Roboflow는 `NO-Hardhat`, COCO는 `person` 등). 그래서 **inference는 아래 5개 이름으로 정규화해서 응답**한다. 다른 서비스와 웹은 이 5개 이름만 안다.
 
-| canonical | 의미 | Roboflow "Construction Site Safety" 원본 이름 |
+| canonical | 의미 |
+|---|---|
+| `person` | 사람 |
+| `helmet` | 안전모 착용 |
+| `no_helmet` | 안전모 미착용 |
+| `vest` | 안전조끼 착용 |
+| `no_vest` | 안전조끼 미착용 |
+
+#### 원본 클래스 → 정규화 매핑표
+
+매핑은 **인덱스가 아니라 이름 기준**이다. Roboflow 데이터셋 버전에 따라 인덱스 순서가 달라질 수 있기 때문이다. 실제 인덱스는 export된 `data.yaml`의 `names`로 확인하고, `gateway/models/classes.yaml`(김정윤 관리)에 기록한다.
+
+**Roboflow "Construction Site Safety"** (학습 모델 `yolov8n-ppe-*`)
+
+| 원본 이름 | 참고 인덱스* | → canonical |
 |---|---|---|
-| `person` | 사람 | `Person` |
-| `helmet` | 안전모 착용 | `Hardhat` |
-| `no_helmet` | 안전모 미착용 | `NO-Hardhat` |
-| `vest` | 조끼 착용 | `Safety Vest` |
-| `no_vest` | 조끼 미착용 | `NO-Safety Vest` |
+| `Hardhat` | 0 | `helmet` |
+| `Mask` | 1 | (제외) |
+| `NO-Hardhat` | 2 | `no_helmet` |
+| `NO-Mask` | 3 | (제외) |
+| `NO-Safety Vest` | 4 | `no_vest` |
+| `Person` | 5 | `person` |
+| `Safety Cone` | 6 | (제외) |
+| `Safety Vest` | 7 | `vest` |
+| `machinery` | 8 | (제외) |
+| `vehicle` | 9 | (제외) |
 
-그 외 클래스(`Mask`, `NO-Mask`, `Safety Cone`, `machinery`, `vehicle` 등)는 응답에서 **제외**한다.
+\* 흔히 쓰이는 10클래스 버전 기준이다. 사용한 버전의 `data.yaml`과 다르면 `classes.yaml`을 기준으로 삼는다.
+
+**COCO 사전학습** (I1 단계 임시 모델 `yolov8n-coco-*`)
+
+| 원본 이름 | 인덱스 | → canonical |
+|---|---|---|
+| `person` | 0 | `person` |
+| 나머지 79개 | 1–79 | (제외) |
+
+COCO 모델에는 안전모·조끼 클래스가 없다. 따라서 모든 사람의 `helmet`과 `vest`는 `unknown`이고 `violation`은 항상 `false`다. 위반 경로를 테스트할 때는 ingest `INFERENCE_MODE=mock`을 쓴다.
+
+(제외) 클래스는 응답의 `detections`에 넣지 않는다.
+
+### 모델 버전 이름 (`model_version`)
+
+형식: `{아키텍처}-{데이터}-{입력크기}-v{번호}` — 소문자, 하이픈 구분
+
+| 예 | 의미 |
+|---|---|
+| `yolov8n-ppe-416-v1` | Roboflow PPE로 학습한 첫 모델, 입력 416 |
+| `yolov8n-ppe-416-v2` | 재학습·데이터 추가 등으로 갱신된 모델 |
+| `yolov8n-coco-416-v1` | COCO 사전학습 모델 (임시) |
+
+- ONNX 파일명은 버전과 같게 짓는다: `gateway/models/{model_version}.onnx`
+- `classes.yaml`의 `model_version` 값이 응답의 `model_version`이 된다.
 
 ---
 
@@ -48,7 +92,9 @@
 | URL | `http://{GATEWAY_HOST}:{GATEWAY_PORT}/api/v1/captures` (기본 포트 `8000`) |
 | Body | **JPEG 원본 바이트 그대로** (multipart 아님 — ESP32 `HTTPClient.POST(buf, len)`로 바로 전송) |
 | 최대 크기 | 2 MB |
-| 권장 해상도 | SXGA 1280×1024 (최소 640×480). JPEG quality 10~12 (esp32-camera 기준, 낮을수록 고화질) |
+| 해상도 | **계약으로 고정하지 않는다.** 펌웨어 설정값으로 뺀다(`config.h`의 `CAPTURE_FRAMESIZE`, `CAPTURE_JPEG_QUALITY`) |
+| 기본값 | SXGA 1280×1024, JPEG quality 10~12 (esp32-camera 기준, 낮을수록 고화질). 전송 시간을 측정한 뒤 박민성이 조정한다 |
+| ingest 검증 | 2 MB 이하의 유효한 JPEG이면 해상도와 관계없이 받는다. 해상도는 로그와 이벤트 기록에만 남긴다 |
 
 **헤더**
 
@@ -58,10 +104,17 @@
 | `X-Device-Id` | ✅ | 위 `device_id` 규칙 | `cam-01` |
 | `X-Device-Token` | ✅ | 공유 토큰. ESP32 `secrets.h`의 `DEVICE_TOKEN` = 게이트웨이 `.env`의 `DEVICE_TOKEN` | `9f3c...` |
 | `X-Capture-Id` | ✅ | 장치가 만든 촬영 고유 ID. **재시도 시 같은 값 유지** → ingest가 중복 제거. 형식 자유(최대 64자), 권장 `{부팅시 랜덤 hex8}-{순번}` | `5e1a9c02-000042` |
-| `X-Captured-At` | ⬜ | 촬영 시각 UTC ISO 8601. NTP 미동기화면 **생략** → ingest 수신 시각 사용 | `2026-11-02T05:31:12Z` |
+| `X-Captured-At` | ⬜* | 촬영 시각(UTC ISO 8601)이다. 펌웨어는 **NTP를 사용**한다(`configTime(0, 0, "pool.ntp.org", ...)`). 동기화되지 않았으면 이 헤더를 **생략**한다. 잘못된 시각은 보내지 않는다 | `2026-11-02T05:31:12Z` |
 | `X-Trigger` | ⬜ | 촬영 계기: `person` / `timer` / `serial` / `manual` | `person` |
 | `X-Detector-Score` | ⬜ | Edge Impulse 사람 감지 점수 0~1 | `0.87` |
 | `X-Firmware-Version` | ⬜ | 디버깅용 | `0.1.0` |
+
+\* NTP가 정상이면 항상 보낸다. 헤더가 없을 때만 선택으로 취급한다.
+
+**ingest의 시각 기록 규칙**
+- ingest는 요청을 받은 시각을 **항상 `received_at`으로 따로 기록**한다.
+- `captured_at`에는 `X-Captured-At` 값을 쓴다. 헤더가 없으면 `received_at` 값을 쓰고 `clock_synced = false`로 표시한다.
+- `X-Captured-At`이 `received_at`보다 1시간 이상 미래이면 장치 시계 오류로 본다. 이때도 헤더가 없을 때와 같이 처리하고(`clock_synced = false`), 경고 로그를 남긴다.
 
 **예시 요청 (PowerShell / curl)**
 ```powershell
@@ -108,6 +161,8 @@ curl.exe -X POST http://localhost:8000/api/v1/captures `
   "status": "pending_upload",
   "captured_at": "2026-11-02T05:31:12Z",
   "received_at": "2026-11-02T05:31:13Z",
+  "clock_synced": true,
+  "image": { "width": 1280, "height": 1024, "bytes": 184322 },
   "result": { "...": "② inference 응답 전체" }
 }
 ```
@@ -136,7 +191,7 @@ curl.exe -X POST http://localhost:8001/infer -H "Content-Type: image/jpeg" --dat
 ```json
 {
   "event_id": "cam-01_20261102T053112Z_a1b2c3",
-  "model_version": "ppe_yolov8n_416_v1",
+  "model_version": "yolov8n-ppe-416-v1",
   "image": { "width": 1280, "height": 1024 },
   "inference_ms": 142.7,
   "persons": [
@@ -164,7 +219,9 @@ curl.exe -X POST http://localhost:8001/infer -H "Content-Type: image/jpeg" --dat
     "person_count": 2,
     "missing_helmet": true,
     "missing_vest": false,
-    "violation": true
+    "violation": true,
+    "unknown_helmet_count": 0,
+    "unknown_vest_count": 1
   }
 }
 ```
@@ -177,7 +234,8 @@ curl.exe -X POST http://localhost:8001/infer -H "Content-Type: image/jpeg" --dat
   - 매칭 방식(영역·IoU 기준)은 inference 내부 구현 — `classes.yaml`로 조정
 - `summary.missing_helmet` = 어떤 사람이라도 `helmet == "missing"`. `missing_vest`도 동일
 - **사람 박스와 매칭되지 않은 `no_helmet`/`no_vest` 검출도 위반으로 집계** (사람 박스가 놓친 경우 대비)
-- `summary.violation` = `missing_helmet || missing_vest`. **`unknown`은 위반 아님**
+- `summary.violation` = `missing_helmet || missing_vest`. **`unknown`은 위반이 아니다.**
+- `summary.unknown_helmet_count` / `unknown_vest_count`: `helmet`/`vest`가 `"unknown"`인 사람 수. 위반 판정에는 쓰지 않고 **통계용으로만 기록**한다(아래 "unknown 통계" 참고).
 - `person_count == 0`이고 `no_*` 검출도 없으면 `violation: false`
 - `detections`: 정규화 클래스만, `conf` 내림차순 정렬 불필요
 
@@ -189,7 +247,7 @@ curl.exe -X POST http://localhost:8001/infer -H "Content-Type: image/jpeg" --dat
 
 ### `GET /healthz`
 ```json
-{ "status": "ok", "model_loaded": true, "model_version": "ppe_yolov8n_416_v1", "imgsz": 416 }
+{ "status": "ok", "model_loaded": true, "model_version": "yolov8n-ppe-416-v1", "imgsz": 416 }
 ```
 모델이 없으면 `503` + `"model_loaded": false` (컨테이너 헬스체크 실패로 표시됨).
 
@@ -204,6 +262,33 @@ curl.exe -X POST http://localhost:8001/infer -H "Content-Type: image/jpeg" --dat
 | `vest_only` | 조끼만 | missing | worn | **true** | 있음 (안전모 미착용) |
 | `none_worn` | 둘 다 미착용 | missing | missing | **true** | 있음 (둘 다) |
 | `no_person` | 사람 없음 | — | — | false (`person_count: 0`) | 없음 |
+
+### unknown 통계
+
+`unknown`은 위반이 아니지만 비율이 높으면 모델이나 카메라 각도에 문제가 있다는 신호다. 그래서 두 곳에 기록한다.
+
+| 위치 | 범위 | 용도 |
+|---|---|---|
+| ingest 로컬 SQLite `events` | **모든 이벤트** (착용·위반·사람 없음 포함). 사진은 지워도 이 기록은 남긴다 | `GET /api/v1/stats` 로 조회. 모델·카메라 점검용 |
+| Supabase `violations` | 위반 건만 | 위반 사진 중 판단 불가 비율 확인 (웹 통계) |
+
+**`GET /api/v1/stats?since=2026-11-01T00:00:00Z&device_id=cam-01`** (ingest. 파라미터는 모두 선택)
+```json
+{
+  "since": "2026-11-01T00:00:00Z",
+  "device_id": "cam-01",
+  "events": 412,
+  "by_status": { "compliant": 350, "pending_upload": 2, "uploaded": 55, "infer_failed": 5 },
+  "persons": 498,
+  "violations": 57,
+  "unknown_helmet_count": 31,
+  "unknown_vest_count": 64,
+  "unknown_helmet_rate": 0.062,
+  "unknown_vest_rate": 0.129,
+  "by_model_version": { "yolov8n-ppe-416-v1": 412 }
+}
+```
+`*_rate` = unknown 수 / `persons` (`persons`가 0이면 0)
 
 ---
 
@@ -226,12 +311,16 @@ curl.exe -X POST http://localhost:8001/infer -H "Content-Type: image/jpeg" --dat
 | `id` | `uuid` | PK, default `gen_random_uuid()` | |
 | `event_id` | `text` | **NOT NULL UNIQUE** | 게이트웨이 생성 ID. cloud-sync는 이 컬럼으로 upsert |
 | `device_id` | `text` | NOT NULL | |
-| `captured_at` | `timestamptz` | NOT NULL | 촬영 시각 (ESP32 미동기화 시 ingest 수신 시각) |
-| `detected_at` | `timestamptz` | NOT NULL | 추론 완료 시각 |
+| `captured_at` | `timestamptz` | NOT NULL | 촬영 시각 (UTC). ESP32 시계가 동기화되지 않았으면 `received_at`과 같은 값 |
+| `received_at` | `timestamptz` | NOT NULL | ingest 수신 시각 (UTC) |
+| `clock_synced` | `boolean` | NOT NULL | `captured_at`이 ESP32 NTP 시각이면 true |
+| `detected_at` | `timestamptz` | NOT NULL | 추론 완료 시각 (UTC) |
 | `image_path` | `text` | NOT NULL | Storage 버킷 내 경로 (버킷명 제외) |
 | `missing_helmet` | `boolean` | NOT NULL | `summary.missing_helmet` |
 | `missing_vest` | `boolean` | NOT NULL | `summary.missing_vest` |
 | `person_count` | `int` | NOT NULL | `summary.person_count` |
+| `unknown_helmet_count` | `int` | NOT NULL default 0 | `summary.unknown_helmet_count` (통계용) |
+| `unknown_vest_count` | `int` | NOT NULL default 0 | `summary.unknown_vest_count` (통계용) |
 | `persons` | `jsonb` | NOT NULL default `'[]'` | ② 응답의 `persons` 배열 그대로 (웹에서 박스 오버레이용) |
 | `model_version` | `text` | | |
 | `inference_ms` | `real` | | |
@@ -247,36 +336,43 @@ Realtime: `supabase_realtime` publication에 포함 → 웹은 `INSERT` 이벤�
   "event_id": "cam-01_20261102T053112Z_a1b2c3",
   "device_id": "cam-01",
   "captured_at": "2026-11-02T05:31:12Z",
+  "received_at": "2026-11-02T05:31:13Z",
+  "clock_synced": true,
   "detected_at": "2026-11-02T05:31:13Z",
   "image_path": "cam-01/2026/11/02/cam-01_20261102T053112Z_a1b2c3.jpg",
   "missing_helmet": true,
   "missing_vest": false,
   "person_count": 2,
+  "unknown_helmet_count": 0,
+  "unknown_vest_count": 1,
   "persons": [
     { "box": [412, 180, 655, 940], "conf": 0.91, "helmet": "missing", "vest": "worn" },
     { "box": [820, 210, 1010, 900], "conf": 0.84, "helmet": "worn", "vest": "unknown" }
   ],
-  "model_version": "ppe_yolov8n_416_v1",
+  "model_version": "yolov8n-ppe-416-v1",
   "inference_ms": 142.7
 }
 ```
+웹은 `captured_at`을 KST(`Asia/Seoul`)로 변환해서 표시한다. DB와 Storage 경로는 UTC 그대로 둔다.
 upsert 키: `on_conflict=event_id`. 순서: **Storage 업로드 성공 → 테이블 upsert** (웹이 사진 없는 행을 보지 않도록).
 
 ---
 
-## 확정 필요 사항 (팀 회의 안건)
+## 확정 내역 (2026-11-02 팀 합의)
 
-| # | 질문 | 관련 | 초안 제안 |
+| # | 항목 | 담당 | 결정 |
 |---|---|---|---|
-| 1 | ESP32 전송을 raw JPEG body로 할지 multipart로 할지 | 박민성, 김세광 | raw (ESP32 구현 단순, 메모리 복사 없음) |
-| 2 | 권장 해상도 SXGA가 XIAO PSRAM/전송 시간에 무리 없는지 | 박민성 | 실측 후 SVGA(800×600)로 낮출 수 있음 |
-| 3 | `X-Captured-At` — ESP32에서 NTP 동기화 넣을지 | 박민성 | 넣음 (`configTime`), 실패 시 헤더 생략 |
-| 4 | 정규화 클래스 5종과 `unknown`은 위반 아님 규칙 | 김정윤, 조아람 | 위 표대로 |
-| 5 | `persons` JSON을 Supabase에 저장해 웹에서 박스 오버레이 할지 | 조아람 | 저장 (오버레이는 선택 구현) |
-| 6 | Storage 경로 날짜 기준 UTC | 조아람 | UTC (표시만 KST) |
-| 7 | `model_version` 명명 규칙 | 김정윤 | `{모델명}_{imgsz}_v{번호}` |
+| 1 | ESP32 전송 형식 | 박민성, 김세광 | raw JPEG body (multipart 아님) |
+| 2 | 촬영 해상도 | 박민성 | SXGA로 시작. 펌웨어 설정값(`CAPTURE_FRAMESIZE`)으로 빼고 전송 시간 측정 후 조정 |
+| 3 | 촬영 시각 | 박민성, 김세광 | ESP32는 NTP 사용. ingest는 `received_at`을 별도 기록하고 `clock_synced` 플래그를 남김 |
+| 4 | 클래스 | 김정윤 | 정규화 5종 `person` `helmet` `no_helmet` `vest` `no_vest`. Roboflow·COCO 매핑표 추가 |
+| 5 | `unknown` | 김정윤 | 위반 아님. `unknown_helmet_count` / `unknown_vest_count`를 기록해 통계로 조회 |
+| 6 | 모델 버전 이름 | 김정윤 | `yolov8n-ppe-416-v1` 형식, ONNX 파일명과 동일 |
+| 7 | `persons` 저장 | 조아람 | Supabase `jsonb` 컬럼 |
+| 8 | 시각 기준 | 조아람 | Storage 경로와 DB는 UTC, 웹 표시만 KST |
 
 ## 변경 이력
 | 버전 | 날짜 | 내용 |
 |---|---|---|
 | v0.1 | 2026-11-02 | 초안 |
+| v1.0 | 2026-11-02 | 팀 확정. `received_at`·`clock_synced` 추가, 해상도를 펌웨어 설정으로 이동, 클래스 매핑표, `unknown_*_count` + `GET /api/v1/stats`, 모델 버전 이름 `yolov8n-ppe-416-v1` |
