@@ -60,7 +60,7 @@
 #endif
 
 #ifndef WIFI_RETRY_MS
-#define WIFI_RETRY_MS 5000  // 끊겼을 때 재연결 시도 간격
+#define WIFI_RETRY_MS 15000  // 끊겼을 때 재연결 시도 간격 (한 번 시도에 몇 초 걸리므로 너무 짧으면 시도가 계속 끊긴다)
 #endif
 
 #ifndef FIRMWARE_VERSION

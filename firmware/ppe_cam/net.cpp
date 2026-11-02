@@ -40,9 +40,13 @@ void net_loop() {
       Serial.println("[net] wifi=disconnected");
     }
   }
+  // reconnect()는 연결 시도 중이면 "sta is connecting" 오류만 내고 아무것도 안 해서, 시도가 멈추면
+  // 영영 안 붙는다(실기에서 확인). 끊긴 상태가 이어지면 연결을 끊고 처음부터 다시 begin한다.
   if (!now && millis() - last_retry_ms >= WIFI_RETRY_MS) {
     last_retry_ms = millis();
-    WiFi.reconnect();
+    Serial.println("[net] wifi retry: disconnect + begin");
+    WiFi.disconnect();
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   }
 }
 
