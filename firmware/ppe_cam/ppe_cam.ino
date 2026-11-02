@@ -116,10 +116,13 @@ void setup() {
 void loop() {
   net_loop();
 
-  // F2에서는 여기서 camera_grab_detect()로 감지 프레임을 얻어 넘긴다
-  DetectResult d = detector_poll(nullptr);
+  bool cooling = (int32_t)(millis() - cooldown_until_ms) < 0;
+  // 쿨다운 중에는 감지 추론을 하지 않는다 (시리얼 'c'만 받아서 skip 로그)
+  camera_fb_t *frame = (camera_ready && !cooling && detector_wants_frame()) ? camera_grab_detect() : nullptr;
+  DetectResult d = detector_poll(frame);
+  camera_return(frame);
   if (d.triggered) {
-    if ((int32_t)(millis() - cooldown_until_ms) < 0) {
+    if (cooling) {
       Serial.printf("[cap] skip: cooldown %lums left\n", (unsigned long)(cooldown_until_ms - millis()));
     } else {
       capture_and_send(d);

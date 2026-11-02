@@ -115,3 +115,51 @@ PC에 g++(MinGW, 예: `winget install BrechtSanders.WinLibs.POSIX.UCRT`)가 필�
 
 - 해상도 전환은 7장 모두 1280×1024로 정상, 멈춤 없음.
 - 신호가 약하면(-75 dBm 이하) 부팅 때 15초 안에 Wi-Fi가 안 붙을 수 있다. 이후 자동 재연결로 붙는다. 그 사이 `E wifi:sta is connecting, return error` 로그는 무해하다.
+
+## 사람 감지 (F2, Edge Impulse)
+
+보드가 평소 QVGA 프레임으로 사람을 감지하고, 감지되면 SXGA로 찍어 보낸다(`X-Trigger: person`, `X-Detector-Score`). 시리얼 `c`도 그대로 된다.
+
+### 라이브러리 설치 (PC마다 한 번)
+모델 라이브러리 zip은 git에 넣지 않는다(규칙 12) → 팀 공유 드라이브 `ei-ppe-person-fomo-arduino-<버전>.zip`.
+```powershell
+powershell -File firmware/build.ps1 -InstallLib <zip 경로>   # 설치 후 컴파일. 새 버전도 같은 명령으로 덮어쓴다
+```
+직접 받으려면 Edge Impulse 프로젝트 `ppe-person-fomo`(ID 1154357) → Deployment → **Arduino library**, **Quantized (int8)**, EON Compiler → Build.
+
+### 설정
+기본값은 `DETECTOR_EI 1`(사람 감지)이다. **라이브러리를 설치해야 빌드된다.** 라이브러리 없이 F1처럼 쓰려면 `secrets.h`에 덮어쓴다:
+```c
+#define DETECTOR_EI 0     // F1 시리얼·타이머 감지 (라이브러리 없이 빌드됨)
+#define DETECT_DEBUG 1    // 추론마다 [det] person=... 출력 (조정할 때만)
+```
+| 설정 | 기본 | 뜻 |
+|---|---|---|
+| `PERSON_THRESHOLD` | 0.3 | person 점수 기준. 모델 안의 min_score(EI 기본 0.5)도 부팅 때 이 값으로 바꾼다. 놓치는 것보다 오탐이 낫다(Pi가 거름) |
+| `DETECT_INTERVAL_MS` | 200 | 추론 간격 |
+| `DETECT_CONSECUTIVE` | 2 | 연속 몇 번 넘어야 촬영 |
+| `COOLDOWN_MS` | 5000 | 촬영 후 쉬는 시간. 이 동안은 추론도 안 한다 |
+
+### 실기 결과 (2026-11-02, 모델 v1.0.43)
+- 추론 dsp 2 ms + nn 32 ms (EI 추정 391 ms보다 훨씬 빠름, ESP32-S3 ESP-NN)
+- 1~3 m 앞 사람: `person=0.50~0.69` → `trig=person` → SXGA 촬영 → ingest 202, `detector_score` 저장됨 → cloud-sync dry_run 업로드까지 확인
+- 사람 없을 때 `person=0.00`
+
+### 시연 영상 인식 (2026-11-02, 모델 v1.0.44, 기준 0.3)
+노트북 화면에 시연 영상(V1, 1280×720)을 반복 재생하고 보드 카메라로 20~40 cm 앞에서 비춤. 영상마다 12초, "사람 감지로 촬영된 횟수":
+
+| 영상 | 촬영 | |
+|---|---|---|
+| both_worn | 1 | ✅ |
+| helmet_only | 0 | ❌ 두 번 측정 모두 못 잡음 |
+| vest_only | 2 | ✅ |
+| none_worn | 2 | ✅ |
+| multi_2p | 1 | ✅ |
+
+- 점수는 대부분 0.4~0.7로 기준 근처라 측정마다 흔들린다. 화면 재촬영이라 화질이 떨어지고, 영상 속 사람이 작다(64×64 입력).
+- 놓치는 장면이 문제가 되면 `DETECTOR_EI 0` + `DETECTOR_TIMER_MS`(예: 5000)로 바꿔 타이머 촬영으로 시연할 수 있다(판정은 Pi가 한다).
+- 모델 zip: `ei-ppe-person-fomo-arduino-1.0.44.zip` (팀 공유 드라이브). 이전 v1.0.43은 영상 프레임 학습 전 모델.
+
+### 주의
+- `crop_and_interpolate_rgb888`은 dst에 잘라낸 크기(QVGA면 240×240×3)로 먼저 쓴다. dst를 모델 크기로 잡으면 힙이 깨진다 → 같은 버퍼에서 처리(`detector_ei.cpp`).
+- EI SDK의 `ei_calloc`은 IDF 5.x에서 정렬이 안 돼 esp-nn에서 힙이 깨질 수 있다 → `detector_ei.cpp`에서 16바이트 정렬로 덮어쓴다.

@@ -2,8 +2,9 @@
 # Run from repo root:
 #   powershell -File firmware/build.ps1                 # compile only
 #   powershell -File firmware/build.ps1 -Port <PORT>    # compile + upload (e.g. COM5)
+#   powershell -File firmware/build.ps1 -InstallLib <zip>  # install Edge Impulse Arduino library zip, then compile
 # Comments are ASCII on purpose: Windows PowerShell 5.1 misreads BOM-less UTF-8 scripts.
-param([string]$Port = "")
+param([string]$Port = "", [string]$InstallLib = "")
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path "$PSScriptRoot/..").Path
 $fqbn = "esp32:esp32:XIAO_ESP32S3:PSRAM=opi"
@@ -27,6 +28,11 @@ if ($data -match '[^\x00-\x7F]') {
     $env:ARDUINO_DIRECTORIES_DATA = "$dd\"; $env:ARDUINO_DIRECTORIES_USER = "$ud\"
 }
 try {
+    if ($InstallLib) {
+        $env:ARDUINO_LIBRARY_ENABLE_UNSAFE_INSTALL = "true"   # needed for --zip-path
+        & $cli lib install --zip-path (Resolve-Path $InstallLib).Path
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    }
     & $cli compile --fqbn $fqbn --build-path $buildPath $sketch
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     if ($Port) {

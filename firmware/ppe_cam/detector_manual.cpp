@@ -1,12 +1,17 @@
 // F1 임시 감지: 시리얼 'c' → serial, DETECTOR_TIMER_MS > 0 이면 주기마다 timer
 #include <Arduino.h>
 
-#include "detector.h"
 #include "settings.h"
+
+#if !DETECTOR_EI
+
+#include "detector.h"
 
 static uint32_t last_timer_ms = 0;
 
 void detector_begin() { last_timer_ms = millis(); }
+
+bool detector_wants_frame() { return false; }
 
 DetectResult detector_poll(camera_fb_t *frame) {
   (void)frame;
@@ -23,3 +28,5 @@ DetectResult detector_poll(camera_fb_t *frame) {
 #endif
   return {false, nullptr, -1.0f};
 }
+
+#endif  // !DETECTOR_EI
