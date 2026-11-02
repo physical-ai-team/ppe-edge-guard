@@ -51,8 +51,8 @@ XIAO ESP32S3 (사람 감지 → 고해상도 JPEG)
 | G1 | 김세광 | `feat/gateway-ingest` | **최우선.** ingest 컨테이너, compose(ingest), `INFERENCE_MODE=mock`, `fake_esp32.py` | 팀원 노트북에서 `docker compose up ingest`를 실행하고 `fake_esp32.py`로 전송하면 202 응답이 오고, `/api/v1/events/{id}`에서 상태 전이가 확인됨 | ✅ 완료 (PR #3) |
 | F1 | 박민성 | `feat/firmware-capture` | 감지 인터페이스 + 임시 감지(타이머/시리얼), 고해상도 촬영, ① 형식으로 전송, 쿨다운, 재연결, 재시도 | `arduino-cli compile` 성공. G1 이후 노트북 ingest로 202 수신 | ⏳ |
 | I1 | 김정윤 | `feat/inference-service` | inference 컨테이너, 공개 사전학습 모델(COCO yolov8n 416), `classes.yaml`, ② 형식 응답 | 노트북에서 단독으로 `curl /infer` 시 계약 형식 응답. 계약 테스트 통과 | ✅ 완료 (PR #10). compose 연동은 김세광 확인 대기 (`gateway/inference/README.md`) |
-| S1 | 조아람 | `feat/supabase-schema` | `violations` 테이블, private 버킷, RLS, Storage 정책, Auth, `seed.sql` | RLS 확인 체크리스트 통과 (dev-testing.md) | 🔄 PR 리뷰 중 (개발 프로젝트 적용·RLS 체크리스트 통과) |
-| W1 | 조아람 | `feat/web-dashboard` | 로그인, 목록, Realtime, signed URL 사진, GitHub Pages 배포 | seed와 수동 insert가 실시간으로 표시됨 | ⏳ (S1 이후) |
+| S1 | 조아람 | `feat/supabase-schema` | `violations` 테이블, private 버킷, RLS, Storage 정책, Auth, `seed.sql` | RLS 확인 체크리스트 통과 (dev-testing.md) | ✅ 완료 (PR #7). Supabase CLI link·db push 사용 |
+| W1 | 조아람 | `feat/web-dashboard` | 로그인, 목록, Realtime, signed URL 사진, GitHub Pages 배포 | seed와 수동 insert가 실시간으로 표시됨 | 🔄 기능 완료 (PR #8), Pages 배포 PR 리뷰 중 (`.github/workflows/pages.yml`) |
 | G2 | 김세광 | `feat/gateway-cloud-sync` | cloud-sync, `SYNC_MODE=dry_run`, 재시도·백오프 | dry_run 통과 후 개발 Supabase에 실제 업로드 | 🔄 dry_run 완료·PR 리뷰 중 (실업로드는 S1 이후) |
 | T1 | 김정윤 | `feat/training-ppe` | Colab 노트북(Roboflow, Colab Secrets), ONNX 640 export, `validate_onnx.py`, 정확도·속도 측정 | 시나리오별 정답률 보고, 모델을 Drive로 공유 | ⏳ |
 | F2 | 박민성 | `feat/firmware-edge-impulse` | EI 데이터 수집·학습, `detector_ei`, EI 라이브러리 설치 문서화 | 실기에서 사람 감지 시 촬영·전송 | ⏳ (F1 이후) |

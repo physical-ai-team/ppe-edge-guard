@@ -1,0 +1,51 @@
+# web/ 대시보드를 GitHub Pages 로 배포한다.
+# web/config.js 는 gitignore 라서 배포할 때 여기서 만들어 넣는다.
+# URL 과 publishable 키는 공개돼도 되는 값이다 (RLS 가 로그인 사용자만 조회 허용).
+# secret(service_role) 키는 절대 넣지 않는다.
+#
+# 처음 한 번: 레포 Settings > Pages > Build and deployment > Source = "GitHub Actions"
+name: Deploy web to Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  SUPABASE_URL: https://ixfghpjaxeuumaobpueo.supabase.co
+  SUPABASE_PUBLISHABLE_KEY: sb_publishable_40QqFpgmhbGXh644zPfJaw_KUhUsfK9
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write web/config.js
+        run: |
+          cat > web/config.js <<EOF
+          export const SUPABASE_URL = "${SUPABASE_URL}";
+          export const SUPABASE_ANON_KEY = "${SUPABASE_PUBLISHABLE_KEY}";
+          EOF
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deployment
+        uses: actions/deploy-pages@v4

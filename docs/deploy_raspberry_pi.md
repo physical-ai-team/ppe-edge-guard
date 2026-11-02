@@ -1,6 +1,6 @@
 # 라즈베리파이 5 게이트웨이 배포 (초안)
 
-> **상태: 초안 — M2 준비 단계.** 지금은 ingest(`INFERENCE_MODE=mock`) + cloud-sync(`SYNC_MODE=dry_run`)만 Pi에 올린다.
+> **상태: 초안 — M2 준비 단계. 1차 실측 완료 (2026-11-02, [측정 기록](#측정-기록)).** 지금은 ingest(`INFERENCE_MODE=mock`) + cloud-sync(`SYNC_MODE=dry_run`)만 Pi에 올린다.
 > inference(I1), 실제 Supabase 업로드(S1), 실제 ESP32(F1)가 붙을 때마다 이 문서를 갱신하고, M4에서 완성한다.
 > 담당: 김세광 (Pi는 김세광만 가지고 있다).
 
@@ -33,14 +33,36 @@
 ssh <사용자>@ppe-gateway.local
 ```
 
-`.local`이 안 되면 공유기 관리 페이지에서 Pi IP를 찾아 `ssh <사용자>@<PI_IP>`로 접속한다.
+**`.local` 이름이 안 되면** 노트북에서 `arp -a`로 같은 네트워크의 IP 목록을 보고 Pi의 IP를 찾아 `ssh <사용자>@<PI_IP>`로 접속한다. Pi를 켜기 전후의 `arp -a` 결과를 비교하면 새로 생긴 항목이 Pi다. IP를 찾은 뒤 아래 `HostName`에 `.local` 대신 IP를 넣으면 된다.
+
+### 노트북 SSH 키 등록 (처음 한 번)
+
+Imager에서 공개키를 넣었더라도 **지금 쓰는 노트북·Windows 계정에 그 개인 키가 없으면** `Permission denied (publickey,password)`가 난다. 이 노트북용 키를 만들어 등록한다. 마지막 명령에서 Pi 비밀번호를 한 번 묻는다.
+
+```powershell
+# 노트북 (PowerShell). passphrase는 Enter (비워 두면 자동화 스크립트에서 쓸 수 있다)
+ssh-keygen -t ed25519 -f $HOME\.ssh\id_ed25519 -C "<이름>-laptop"
+type $HOME\.ssh\id_ed25519.pub | ssh <사용자>@ppe-gateway.local "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+Add-Content $HOME\.ssh\config "Host ppe-gateway`n    HostName ppe-gateway.local`n    User <사용자>`n"
+ssh ppe-gateway "whoami"              # 비밀번호 없이 사용자 이름이 나오면 끝
+```
+
+- `Host key verification failed`: `known_hosts`에 그 이름(`ppe-gateway` vs `ppe-gateway.local`)이 아직 없다. 대화형 터미널에서 한 번 접속해 지문을 확인하고 `yes`로 등록한다. OS를 다시 구웠다면 `ssh-keygen -R ppe-gateway.local`로 옛 키를 지운 뒤 등록한다.
+- 노트북 PowerShell 5.1에서 `ssh ppe-gateway "..."`로 원격 명령을 보낼 때 **안쪽 큰따옴표가 지워진다.** 긴 명령은 스크립트 파일을 `scp`로 보낸 뒤 `ssh ppe-gateway 'bash ~/x.sh'`처럼 실행한다.
 
 ## 2. 첫 부팅 설정
 
 ```bash
 sudo apt update && sudo apt full-upgrade -y
 sudo apt install -y git curl
-sudo reboot
+[ -f /var/run/reboot-required ] && sudo reboot   # 커널 등 재부팅이 필요한 업데이트가 있을 때만
+```
+
+**sudo 비밀번호** — Imager로 만든 사용자는 sudo마다 비밀번호를 물을 수 있다(2026-11 Trixie 이미지에서 확인). 노트북에서 스크립트로 원격 설치하려면 이 사용자만 비밀번호 없이 sudo를 쓰게 한다. 게이트웨이 전용 장비이고 SSH는 키로 접속하므로 허용한다. 되돌리려면 이 파일만 지운다.
+
+```bash
+echo "$USER ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/010-$USER-nopasswd > /dev/null
+sudo chmod 440 /etc/sudoers.d/010-$USER-nopasswd && sudo visudo -c    # "parsed OK"
 ```
 
 **시각 동기화 확인** — 게이트웨이의 `received_at`은 Pi 시계를 쓰고, ESP32 시각이 이상한지도 이 시계 기준으로 판단한다.
@@ -61,16 +83,35 @@ hostname -I          # 이 IP를 기록 → ESP32 펌웨어 GATEWAY_HOST, fake_e
 
 ```bash
 curl -fsSL https://get.docker.com -o get-docker.sh
-sh get-docker.sh                       # 내용 확인 후 실행: less get-docker.sh
+sudo sh get-docker.sh                  # 내용 확인 후 실행: less get-docker.sh (약 1분)
 sudo usermod -aG docker $USER
+sudo systemctl enable --now docker     # 재부팅 시 Docker(→ 컨테이너) 자동 시작
 exit                                   # 재접속해야 그룹이 적용된다
 ```
 
 ```bash
-docker run --rm hello-world
-docker compose version                 # v2 플러그인 확인
-sudo systemctl is-enabled docker       # enabled → 재부팅 시 컨테이너 자동 시작
+docker run --rm hello-world            # "Hello from Docker!" (arm64v8)
+docker compose version
 ```
+
+### memory cgroup 켜기 (필수, 재부팅 필요)
+
+Raspberry Pi 커널은 기본으로 `cgroup_disable=memory`라서 **compose의 `mem_limit`이 무시되고 `docker stats` 메모리가 `0B / 0B`로 나온다.** 빌드 로그에 `Your kernel does not support memory limit capabilities ... Limitation discarded`가 찍히고, `docker info`에 `WARNING: No memory limit support`가 나온다. 컨테이너를 만들기 **전에** 켠다.
+
+```bash
+f=/boot/firmware/cmdline.txt
+sudo cp -p $f $f.bak                                   # 백업
+sudo sed -i '1 s/$/ cgroup_enable=memory cgroup_memory=1/' $f
+cat $f; grep -c '' $f                                  # 한 줄이어야 한다 (1)
+sudo reboot
+```
+
+```bash
+grep -w memory /sys/fs/cgroup/cgroup.controllers && echo OK    # 재접속 후
+```
+
+- `cmdline.txt`는 **한 줄짜리 파일**이다. 줄바꿈이 생기면 부팅이 안 될 수 있다. 그때는 SD 카드를 PC에 꽂고 `bootfs` 드라이브의 `cmdline.txt.bak`을 `cmdline.txt`로 되돌린다.
+- 이미 컨테이너를 만든 뒤에 켰다면 제한값이 0으로 저장돼 있으므로 `docker compose up -d --force-recreate`로 다시 만든다(볼륨·데이터 유지).
 
 ## 4. 레포와 `.env`
 
@@ -99,10 +140,13 @@ M2 준비 단계의 `.env` 값:
 
 ```bash
 cd ~/ppe-edge-guard/gateway
-time docker compose up -d --build      # 첫 빌드 시간은 아래 측정 기록에 남긴다
+time docker compose up -d --build      # 첫 빌드 약 3~4분. 시간은 아래 측정 기록에 남긴다
 docker compose ps                      # ingest, cloud-sync 모두 (healthy)
 docker compose logs -f                 # Ctrl+C로 빠져나와도 컨테이너는 계속 돈다
 ```
+
+- 이미지 크기는 서비스당 약 0.7GB다(ingest 731MB, cloud-sync 697MB). 빌드 캐시도 약 1.3GB 쌓이므로 SD 여유 공간을 본다.
+- 노트북에서 원격으로 빌드할 때는 SSH가 끊겨도 계속되도록 `setsid nohup ... > ~/build.log 2>&1 < /dev/null &`로 돌리고 로그를 본다.
 
 ## 6. 노트북에서 전송 테스트
 
@@ -112,6 +156,10 @@ conda run -n ppe-ingest python gateway/scripts/fake_esp32.py --url http://<PI_IP
 curl.exe http://<PI_IP>:8000/api/v1/stats
 ```
 
+- 토큰을 화면·히스토리에 남기지 않으려면 `--token` 대신 환경변수로 넘긴다(`fake_esp32.py`는 `DEVICE_TOKEN` 환경변수를 읽는다).
+  ```powershell
+  $env:DEVICE_TOKEN = (ssh ppe-gateway 'grep ^DEVICE_TOKEN= ~/ppe-edge-guard/gateway/.env | cut -d= -f2').Trim()
+  ```
 - 전부 `202`이고, `--wait` 결과가 `compliant`/`pending_upload`로 바뀌면 성공.
 - `stats`의 `by_status`에서 `pending_upload`가 남지 않고 `uploaded`로 넘어가야 한다(dry_run).
 - Pi에서 dry_run 결과 확인: `docker compose exec cloud-sync find /data/sync-dryrun -type f | head`
@@ -131,15 +179,15 @@ bash scripts/pi_check.sh               # 읽기 전용 점검 (시각, 메모리
 conda run -n ppe-ingest python gateway/scripts/fake_esp32.py --url http://<PI_IP>:8000 --token <DEVICE_TOKEN> --count 50 --interval 0.5
 ```
 
-보내는 동안 Pi에서 `docker stats`로 CPU·메모리를 본다.
+보내는 동안 Pi에서 `docker stats`로 CPU·메모리를 본다. `docker stats --no-stream` 한 번에 약 2~3초가 걸리므로 1초 간격으로 돌려도 실제 샘플은 2~3초마다 하나다.
 
 ### 측정 기록
 
-측정할 때마다 한 줄씩 추가하고, 같은 내용을 PR/이슈 코멘트로 공유한다.
+측정할 때마다 한 줄씩 추가하고, 같은 내용을 PR/이슈 코멘트로 공유한다. 메모리는 `docker stats` 값이다(제한 256MiB). CPU는 코어 1개 기준 %다.
 
-| 날짜 | 커밋 | 구성 | 첫 빌드 시간 | 유휴 메모리 (ingest / cloud-sync) | 50장 전송 중 최대 메모리·CPU | 온도·스로틀 | 비고 |
-|---|---|---|---|---|---|---|---|
-| | | ingest mock + cloud-sync dry_run | | | | | |
+| 날짜 | 커밋 | 구성 | 첫 빌드 시간 | 유휴 메모리 (ingest / cloud-sync) | 전송 테스트 | 50장 중 최대 메모리 / CPU (ingest · cloud-sync) | 온도·스로틀 | 비고 |
+|---|---|---|---|---|---|---|---|---|
+| 2026-11-02 | `2ae62a9` | ingest mock + cloud-sync dry_run. Pi OS Lite 64-bit (Debian 13 trixie, kernel 6.18.50), Docker 29.9.2, Compose v5.6.1, microSD(루트 57GB), Wi-Fi | **201초** (3분 21초, Docker 설치 약 1분 별도) | 58 / 46 MiB | 10장 `--wait`: 202 10/10, 14초. 50장 0.5초 간격: 202 50/50, 34초. dry_run 업로드 누락 0 | 53 / 46 MiB · 2.5% / 1.1% | 최고 53°C, `0x0` | memory cgroup을 켠 뒤 측정. 켜기 전에는 `docker stats`가 0B라 호스트 RSS로 잼(ingest 66, cloud-sync 60 MiB). 재부팅 후 수동 조작 없이 두 컨테이너 `healthy`, 데이터 유지 |
 
 ## 8. 재부팅 자동 시작 확인
 
@@ -151,7 +199,9 @@ docker compose ps                      # 손대지 않아도 (healthy)
 timedatectl | grep synchronized        # yes
 ```
 
-`restart: unless-stopped`이므로 `docker compose down`으로 직접 내린 경우가 아니면 부팅 시 자동으로 올라온다.
+`restart: unless-stopped`이므로 `docker compose down`으로 직접 내린 경우가 아니면 부팅 시 자동으로 올라온다. 재부팅 명령 후 약 20초 만에 부팅됐고, 1~2분 뒤 재접속했을 때 두 컨테이너 모두 `healthy`였다.
+
+- `/tmp`는 재부팅하면 비워진다. 측정용 스크립트 등은 홈 폴더에 둔다.
 
 ## 9. 업데이트 배포
 
@@ -170,7 +220,11 @@ docker image prune -f                  # 이전 이미지 정리 (SD 용량)
 
 | 증상 | 확인 |
 |---|---|
+| `ppe-gateway.local`을 못 찾음 | 노트북에서 `arp -a`로 Pi IP를 찾아 IP로 접속 ([1단계](#1-os-설치-노트북에서-raspberry-pi-imager)) |
+| SSH `Permission denied (publickey,password)` | 이 노트북에 등록된 키가 없다 → [노트북 SSH 키 등록](#노트북-ssh-키-등록-처음-한-번) |
+| SSH `Host key verification failed` | `known_hosts`에 그 호스트 이름이 없거나 OS를 다시 구움 → 대화형으로 한 번 접속해 등록, 필요하면 `ssh-keygen -R` |
 | 노트북에서 `http://<PI_IP>:8000` 연결 안 됨 | 같은 네트워크인지, Pi에서 `curl localhost:8000/healthz`는 되는지, 공용 Wi-Fi의 기기 간 통신 차단(AP isolation) 여부 |
+| `docker stats` 메모리가 `0B / 0B`, `mem_limit` 무시 | memory cgroup 꺼짐 → [3단계 cgroup 켜기](#memory-cgroup-켜기-필수-재부팅-필요) 후 `--force-recreate`. `pi_check.sh`가 경고로 알려 준다 |
 | `401 invalid_token` | 노트북 `--token`과 Pi `.env`의 `DEVICE_TOKEN` 일치 여부. `.env` 수정 후 `docker compose up -d` 재실행 |
 | `clock_synced=false`가 계속 나옴 | Pi `timedatectl` 동기화 여부. ESP32 NTP 문제일 수도 있다 (`X-Captured-At` 미전송) |
 | 컨테이너가 `unhealthy`·재시작 반복 | `docker compose logs <서비스>`. cloud-sync는 `SYNC_MODE=supabase`인데 키가 비어 있으면 시작하지 않는다 |
