@@ -1,0 +1,43 @@
+# CODEOWNERS — 폴더별 담당자 (PR 리뷰어 자동 지정)
+#
+# TODO(김세광): 아래 @GITHUB_ID_* 자리를 실제 GitHub 아이디로 바꿀 것.
+#   예) @GITHUB_ID_KIMSEGWANG → @kimsegwang
+#   존재하지 않는 아이디가 남아 있으면 GitHub가 이 파일에 오류를 표시한다(동작에는 영향 없음).
+#
+# 실제로 강제하려면: Settings → Branches → main 보호 규칙에서
+#   "Require a pull request before merging" + "Require review from Code Owners" 체크.
+#
+# 규칙: 아래쪽 줄이 위쪽 줄보다 우선한다.
+#   김세광  = @GITHUB_ID_KIMSEGWANG   (팀장: 게이트웨이, compose, 배포, 최종 머지)
+#   박민성  = @GITHUB_ID_PARKMINSUNG  (펌웨어, Edge Impulse)
+#   김정윤  = @GITHUB_ID_KIMJEONGYUN  (학습, inference)
+#   조아람  = @GITHUB_ID_JOARAM       (Supabase, 웹)
+#   이기태  — 코드 작업 없음 (CODEOWNERS 미지정)
+
+# 기본: 지정되지 않은 모든 파일은 팀장
+*                               @GITHUB_ID_KIMSEGWANG
+
+# 펌웨어
+/firmware/                      @GITHUB_ID_PARKMINSUNG
+
+# 학습 · 추론
+/training/                      @GITHUB_ID_KIMJEONGYUN
+/gateway/inference/             @GITHUB_ID_KIMJEONGYUN
+/gateway/models/                @GITHUB_ID_KIMJEONGYUN
+
+# 게이트웨이 (inference 제외)
+/gateway/ingest/                @GITHUB_ID_KIMSEGWANG
+/gateway/cloud-sync/            @GITHUB_ID_KIMSEGWANG
+/gateway/common/                @GITHUB_ID_KIMSEGWANG
+/gateway/scripts/               @GITHUB_ID_KIMSEGWANG
+/gateway/docker-compose*.yml    @GITHUB_ID_KIMSEGWANG
+/gateway/.env.example           @GITHUB_ID_KIMSEGWANG
+
+# Supabase · 웹
+/supabase/                      @GITHUB_ID_JOARAM
+/web/                           @GITHUB_ID_JOARAM
+
+# 공통 기준 문서 — 경계 계약은 관련 담당자 전원 리뷰
+/docs/interfaces.md             @GITHUB_ID_KIMSEGWANG @GITHUB_ID_PARKMINSUNG @GITHUB_ID_KIMJEONGYUN @GITHUB_ID_JOARAM
+/CLAUDE.md                      @GITHUB_ID_KIMSEGWANG
+/.github/                       @GITHUB_ID_KIMSEGWANG

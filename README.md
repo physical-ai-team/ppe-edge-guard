@@ -16,7 +16,9 @@ XIAO ESP32S3 ──HTTP──▶ Raspberry Pi 5 (ingest → inference → cloud-
 | `training/` | Colab 학습 노트북, ONNX 검증 스크립트 |
 | `docs/` | 배포 가이드 |
 
-빌드·실행 명령과 개발 규칙은 [CLAUDE.md](CLAUDE.md)를 참고.
+- 팀 역할·브랜치 규칙·빌드/실행 명령: [CLAUDE.md](CLAUDE.md)
+- 서비스 간 데이터 형식(계약): [docs/interfaces.md](docs/interfaces.md)
+- Pi 없이 혼자 테스트하는 방법: [docs/dev-testing.md](docs/dev-testing.md)
 
 ## 빠른 시작 (로컬 conda)
 
