@@ -5,6 +5,7 @@ channels:
 dependencies:
   - python=3.11
   - onnxruntime>=1.17
+  - onnx>=1.12,<2       # ultralytics ONNX export에 필요 (없으면 실행 중 pip로 자동 설치됨)
   - numpy>=1.26
   - pillow>=10
   - pyyaml>=6

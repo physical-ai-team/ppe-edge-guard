@@ -1,0 +1,46 @@
+# 모델별 원본 클래스 → 정규화 5종(person helmet no_helmet vest no_vest) 매핑.
+# docs/interfaces.md "정규화 클래스 이름" 참고. 매핑은 인덱스가 아니라 이름 기준이다.
+#
+# inference는 MODEL_PATH 파일명(확장자 제외)을 키로 아래 항목을 찾는다.
+#   /models/yolov8n-ppehf-416-v1.onnx → models.yolov8n-ppehf-416-v1
+# 키 = model_version = 응답의 model_version.
+#
+# source_names: 모델 출력 인덱스 순서 그대로의 원본 이름 (export 스크립트가 체크포인트와 대조)
+# canonical:    원본 이름 → 정규화 이름. 여기 없는 원본 클래스는 응답에서 제외한다.
+
+models:
+  # 공개 PPE 모델 (Hugging Face, MIT). Roboflow "Construction Site Safety" 10클래스와 같은 이름·순서.
+  # 출처: https://huggingface.co/Hansung-Cho/yolov8-ppe-detection @ ac0027bd38bc
+  # 생성: python training/export_hf_model.py
+  # 원 모델은 imgsz 640으로 학습됨(30 epochs). 팀 기준 416으로 export해서 쓴다. 640은 비교용.
+  yolov8n-ppehf-416-v1:
+    imgsz: 416
+    source_names: &ppehf_names
+      - Hardhat
+      - Mask
+      - NO-Hardhat
+      - NO-Mask
+      - NO-Safety Vest
+      - Person
+      - Safety Cone
+      - Safety Vest
+      - machinery
+      - vehicle
+    canonical: &ppehf_canonical
+      Hardhat: helmet
+      NO-Hardhat: no_helmet
+      Safety Vest: vest
+      NO-Safety Vest: no_vest
+      Person: person
+
+  yolov8n-ppehf-640-v1:
+    imgsz: 640
+    source_names: *ppehf_names
+    canonical: *ppehf_canonical
+
+  # COCO 사전학습 (I1 임시). 사람만 감지 → helmet/vest는 항상 unknown.
+  yolov8n-coco-416-v1:
+    imgsz: 416
+    source_names_note: COCO 80클래스 (인덱스 0 = person)
+    canonical:
+      person: person
