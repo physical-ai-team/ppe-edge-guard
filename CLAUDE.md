@@ -49,13 +49,13 @@ XIAO ESP32S3 (사람 감지 → 고해상도 JPEG)
 | 트랙 | 담당 | 브랜치 | 내용 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
 | G1 | 김세광 | `feat/gateway-ingest` | **최우선.** ingest 컨테이너, compose(ingest), `INFERENCE_MODE=mock`, `fake_esp32.py` | 팀원 노트북에서 `docker compose up ingest`를 실행하고 `fake_esp32.py`로 전송하면 202 응답이 오고, `/api/v1/events/{id}`에서 상태 전이가 확인됨 | ✅ 완료 (PR #3) |
-| F1 | 박민성 | `feat/firmware-capture` | 감지 인터페이스 + 임시 감지(타이머/시리얼), 고해상도 촬영, ① 형식으로 전송, 쿨다운, 재연결, 재시도 | `arduino-cli compile` 성공. G1 이후 노트북 ingest로 202 수신 | ⏳ |
+| F1 | 박민성 | `feat/firmware-capture` | 감지 인터페이스 + 임시 감지(타이머/시리얼), 고해상도 촬영, ① 형식으로 전송, 쿨다운, 재연결, 재시도 | `arduino-cli compile` 성공. G1 이후 노트북 ingest로 202 수신 | 🔄 PR 리뷰 중 (보드 실기 6개 통과) |
 | I1 | 김정윤 | `feat/inference-service` | inference 컨테이너, 공개 사전학습 모델(COCO yolov8n 416), `classes.yaml`, ② 형식 응답 | 노트북에서 단독으로 `curl /infer` 시 계약 형식 응답. 계약 테스트 통과 | ✅ 완료 (PR #10). compose 연동 완료 (김세광, `feat/gateway-compose-inference`) |
 | S1 | 조아람 | `feat/supabase-schema` | `violations` 테이블, private 버킷, RLS, Storage 정책, Auth, `seed.sql` | RLS 확인 체크리스트 통과 (dev-testing.md) | ✅ 완료 (PR #7). Supabase CLI link·db push 사용 |
 | W1 | 조아람 | `feat/web-dashboard` | 로그인, 목록, Realtime, signed URL 사진, GitHub Pages 배포 | seed와 수동 insert가 실시간으로 표시됨 | 🔄 기능 완료 (PR #8), Pages 배포 PR 리뷰 중 (`.github/workflows/pages.yml`) |
 | G2 | 김세광 | `feat/gateway-cloud-sync` | cloud-sync, `SYNC_MODE=dry_run`, 재시도·백오프 | dry_run 통과 후 개발 Supabase에 실제 업로드 | ✅ 완료 (PR #5). 2026-11-02 개발 Supabase 실업로드 확인 (Storage → 테이블 upsert, 웹 표시, 비로그인 RLS 차단) |
 | T1 | 김정윤 | `feat/training-ppe` | Colab 노트북(Roboflow, Colab Secrets), ONNX 640 export, `validate_onnx.py`, 정확도·속도 측정 | 시나리오별 정답률 보고, 모델을 Drive로 공유 | ⏳ |
-| F2 | 박민성 | `feat/firmware-edge-impulse` | EI 데이터 수집·학습, `detector_ei`, EI 라이브러리 설치 문서화 | 실기에서 사람 감지 시 촬영·전송 | ⏳ (F1 이후) |
+| F2 | 박민성 | `feat/firmware-edge-impulse` | EI 데이터 수집·학습, `detector_ei`, EI 라이브러리 설치 문서화 | 실기에서 사람 감지 시 촬영·전송 | 🔄 PR 리뷰 중 (모델 v1.0.44, 시연 영상 5개 중 4개 감지) |
 | V1 | 이기태 | — | 시나리오 5종 검증·시연 영상 (dev-testing.md의 촬영 가이드) | 공유 드라이브에 시나리오별 업로드 | ⏳ |
 
 ### 2. 통합 마일스톤 (김세광)
@@ -124,11 +124,12 @@ conda env create -f training/environment.yml             # ppe-training
 # 의존성 변경 후: conda env update -f <file> --prune
 ```
 
-### 펌웨어 (F1에서 확정)
+### 펌웨어 (자세한 내용: [firmware/README.md](firmware/README.md))
 ```powershell
-# FQBN: esp32:esp32:XIAO_ESP32S3 (+ PSRAM=opi)
-arduino-cli compile --fqbn <FQBN> firmware/ppe_cam
-arduino-cli upload  --fqbn <FQBN> -p <PORT> firmware/ppe_cam   # <PORT>는 각자 확인. 하드코딩 금지
+# FQBN: esp32:esp32:XIAO_ESP32S3:PSRAM=opi. 먼저 firmware/ppe_cam/secrets.example.h → secrets.h 복사
+powershell -File firmware/build.ps1                  # 컴파일 (한글 사용자 폴더 PC 우회 포함)
+powershell -File firmware/build.ps1 -Port <PORT>     # 컴파일 + 업로드. <PORT>는 각자 확인. 하드코딩 금지
+powershell -File firmware/tests/run_tests.ps1        # 계약 규칙(proto) 단위 시험 (PC g++)
 ```
 
 ### 게이트웨이
