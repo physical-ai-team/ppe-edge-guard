@@ -21,7 +21,10 @@
 
 **F2 (`feat/firmware-edge-impulse`, F1 머지 후)**
 - [ ] Edge Impulse 프로젝트 `ppe-person-fomo` (계정 minff, ID 1154357, Private): 공개 126387 + 121370(라벨 hum→person) 합쳐 603장, FOMO MobileNetV2 0.1, 64×64 RGB, 60 epoch 증강. 시험 정확도 63.4%, 검증 재현율 0.63, ESP-EYE 추정 391ms. 합쳐도 원본보다 나아지지 않았음.
-- [ ] 다음 시도: 판정 기준 0.5 → 낮추기(사람 놓치는 게 더 치명적, 오탐은 Pi가 거름), 보드 카메라로 찍은 시연 장소 사진 추가 학습
+- [ ] **결정(2026-11-02): 시간이 없어 이기태 시연 영상(V1)이 나오면 그 프레임으로 재학습한다.** 영상에서 1~2 fps로 프레임 추출 → EI 업로드 → `person` 박스 라벨 → 재학습. 판정 기준 0.5 → 낮추기(사람 놓치는 게 더 치명적, 오탐은 Pi가 거름).
+  - 폰 영상은 보드 카메라(OV3660)와 색·화각이 달라 성능이 떨어질 수 있다 → 시연 장소에서 보드로 찍은 사진(`c`로 촬영한 ingest 사진)도 섞는다.
+  - 얼굴 나온 영상·프레임은 git 금지(규칙 13), 공유 드라이브에서만. EI 프로젝트는 Private 유지.
+  - 영상이 늦으면 대안: 시연은 F1 타이머 트리거(예: 3~5초)로 하고 사람 판정은 Pi에 맡긴다(이미 실기 통과).
 - [ ] Arduino 라이브러리로 내보내기 → `detector_ei.cpp`(`detector.h` 인터페이스) — `camera_grab_detect()`로 QVGA 프레임을 받아 판정. zero-touch 교훈: EI SDK `ei_calloc` 16바이트 정렬 문제(코어 3.x에서 힙 깨짐) → 정렬된 `ei_calloc`을 펌웨어에 넣기, `fmt2rgb888`은 RGB 순서(BGR로 뒤집지 말 것)
 - [ ] Edge Impulse 임시 Public 프로젝트 `tmp-121370-import`(ID 1154360) 삭제 (사람이 직접)
 
