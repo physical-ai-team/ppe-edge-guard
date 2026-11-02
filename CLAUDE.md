@@ -55,7 +55,7 @@ XIAO ESP32S3 (사람 감지 → 고해상도 JPEG)
 | W1 | 조아람 | `feat/web-dashboard` | 로그인, 목록, Realtime, signed URL 사진, GitHub Pages 배포 | seed와 수동 insert가 실시간으로 표시됨 | ⏳ (S1 이후) |
 | G2 | 김세광 | `feat/gateway-cloud-sync` | cloud-sync, `SYNC_MODE=dry_run`, 재시도·백오프 | dry_run 통과 후 개발 Supabase에 실제 업로드 | 🔄 dry_run 완료·PR 리뷰 중 (실업로드는 S1 이후) |
 | T1 | 김정윤 | `feat/training-ppe` | Colab 노트북(Roboflow, Colab Secrets), ONNX 416 export, `validate_onnx.py`, 정확도·속도 측정 | 시나리오별 정답률 보고, 모델을 Drive로 공유 | ⏳ |
-| F2 | 박민성 | `feat/firmware-edge-impulse` | EI 데이터 수집·학습, `detector_ei`, EI 라이브러리 설치 문서화 | 실기에서 사람 감지 시 촬영·전송 | ⏳ (F1 이후) |
+| F2 | 박민성 | `feat/firmware-edge-impulse` | EI 데이터 수집·학습, `detector_ei`, EI 라이브러리 설치 문서화 | 실기에서 사람 감지 시 촬영·전송 | 🔄 Draft PR (보드 사람 감지 → 전송 확인, 모델 확정 중) |
 | V1 | 이기태 | — | 시나리오 5종 검증·시연 영상 (dev-testing.md의 촬영 가이드) | 공유 드라이브에 시나리오별 업로드 | ⏳ |
 
 ### 2. 통합 마일스톤 (김세광)

@@ -115,3 +115,36 @@ PC에 g++(MinGW, 예: `winget install BrechtSanders.WinLibs.POSIX.UCRT`)가 필�
 
 - 해상도 전환은 7장 모두 1280×1024로 정상, 멈춤 없음.
 - 신호가 약하면(-75 dBm 이하) 부팅 때 15초 안에 Wi-Fi가 안 붙을 수 있다. 이후 자동 재연결로 붙는다. 그 사이 `E wifi:sta is connecting, return error` 로그는 무해하다.
+
+## 사람 감지 (F2, Edge Impulse)
+
+보드가 평소 QVGA 프레임으로 사람을 감지하고, 감지되면 SXGA로 찍어 보낸다(`X-Trigger: person`, `X-Detector-Score`). 시리얼 `c`도 그대로 된다.
+
+### 라이브러리 설치 (PC마다 한 번)
+모델 라이브러리 zip은 git에 넣지 않는다(규칙 12) → 팀 공유 드라이브 `ei-ppe-person-fomo-arduino-<버전>.zip`.
+```powershell
+powershell -File firmware/build.ps1 -InstallLib <zip 경로>   # 설치 후 컴파일. 새 버전도 같은 명령으로 덮어쓴다
+```
+직접 받으려면 Edge Impulse 프로젝트 `ppe-person-fomo`(ID 1154357) → Deployment → **Arduino library**, **Quantized (int8)**, EON Compiler → Build.
+
+### 켜기
+`secrets.h`(개인) 또는 `config.h`에서:
+```c
+#define DETECTOR_EI 1     // 0이면 F1 시리얼·타이머 감지 (라이브러리 없이 빌드됨)
+#define DETECT_DEBUG 1    // 추론마다 [det] person=... 출력 (조정할 때만)
+```
+| 설정 | 기본 | 뜻 |
+|---|---|---|
+| `PERSON_THRESHOLD` | 0.4 | person 점수 기준. 놓치는 것보다 오탐이 낫다(Pi가 거름) |
+| `DETECT_INTERVAL_MS` | 200 | 추론 간격 |
+| `DETECT_CONSECUTIVE` | 2 | 연속 몇 번 넘어야 촬영 |
+| `COOLDOWN_MS` | 5000 | 촬영 후 쉬는 시간. 이 동안은 추론도 안 한다 |
+
+### 실기 결과 (2026-11-02, 모델 v1.0.43)
+- 추론 dsp 2 ms + nn 32 ms (EI 추정 391 ms보다 훨씬 빠름, ESP32-S3 ESP-NN)
+- 1~3 m 앞 사람: `person=0.50~0.69` → `trig=person` → SXGA 촬영 → ingest 202, `detector_score` 저장됨 → cloud-sync dry_run 업로드까지 확인
+- 사람 없을 때 `person=0.00`
+
+### 주의
+- `crop_and_interpolate_rgb888`은 dst에 잘라낸 크기(QVGA면 240×240×3)로 먼저 쓴다. dst를 모델 크기로 잡으면 힙이 깨진다 → 같은 버퍼에서 처리(`detector_ei.cpp`).
+- EI SDK의 `ei_calloc`은 IDF 5.x에서 정렬이 안 돼 esp-nn에서 힙이 깨질 수 있다 → `detector_ei.cpp`에서 16바이트 정렬로 덮어쓴다.
