@@ -59,5 +59,6 @@ conda run -n ppe-ingest python -m pytest -q
   - inference가 400을 반환하거나 사진 파일이 없으면 `infer_failed`로 기록한다.
 - **정리** (`CLEANUP_INTERVAL_SEC`마다)
   - 보관 기간이 지났거나 용량 상한을 넘으면 사진을 삭제한다.
-  - `received`, `inferring`, `pending_upload` 상태의 사진은 지우지 않는다.
+  - `received`, `inferring`, `pending_upload`, `upload_failed` 상태의 사진은 지우지 않는다.
+  - `upload_failed` 사진이 남아 있으면 건수가 바뀔 때 경고 로그를 남긴다(복구는 [cloud-sync README](../cloud-sync/README.md)).
   - DB 기록은 남긴다(통계용).

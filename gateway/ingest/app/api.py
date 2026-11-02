@@ -180,6 +180,9 @@ def get_event(event_id: str, request: Request):
         },
         "infer_attempts": row["infer_attempts"],
         "last_error": row["last_error"],
+        "sync_attempts": row["sync_attempts"],
+        "sync_error": row["sync_error"],
+        "next_sync_at": row["next_sync_at"],
         "uploaded_at": row["uploaded_at"],
         "result": json.loads(row["result_json"]) if row["result_json"] else None,
     }

@@ -12,7 +12,7 @@
 | ingest `INFERENCE_MODE=mock` | inference 없이 시나리오별 가짜 결과를 생성 | 김세광 / `feat/gateway-ingest` ✅ | 김세광, 박민성 |
 | ingest `MOCK_SCENARIO` | `both_worn` `helmet_only` `vest_only` `none_worn` `no_person` `random` 중 선택 | 위와 동일 | |
 | `gateway/scripts/fake_esp32.py` | ESP32 대신 ①번 요청을 그대로 전송 (폴더의 jpg 순회, 간격·장치ID 지정, `--resend` 중복, `--no-captured-at` NTP 없음, `--wait` 결과 확인) | 김세광 / `feat/gateway-ingest` ✅ | 김세광, 김정윤, 박민성 |
-| cloud-sync `SYNC_MODE=dry_run` | Supabase 대신 `/data/sync-dryrun/`에 사진과 JSON을 기록 | 김세광 / `feat/gateway-cloud-sync` ⏳ | 김세광 |
+| cloud-sync `SYNC_MODE=dry_run` | Supabase 대신 `/data/sync-dryrun/`에 사진과 JSON을 기록 | 김세광 / `feat/gateway-cloud-sync` ✅ | 김세광 |
 | `supabase/seed.sql` | 가짜 위반 기록 몇 건 (웹 화면 개발용) | 조아람 / `feat/supabase-schema` ⏳ | 조아람 |
 | 공개 사전학습 ONNX (`yolov8n` COCO, 416) | PPE 모델 완성 전에 inference 동작 확인용. 사람만 감지하며 helmet/vest는 `unknown` | 김정윤 / `feat/inference-service` ⏳ | 김정윤, 김세광 |
 | 테스트 이미지·영상 | 시나리오별 사진·영상. **git에 올리지 않음** → 팀 공유 드라이브 | 이기태 | 전원 |

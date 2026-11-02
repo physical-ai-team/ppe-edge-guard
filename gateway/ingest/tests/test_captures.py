@@ -3,6 +3,7 @@ import pytest
 
 from app.images import MAX_IMAGE_BYTES
 from conftest import CAPTURED_AT, CAPTURED_AT_ISO, capture_headers, make_jpeg, wait_status
+from ppe_common import db
 
 
 def test_accepts_jpeg_and_returns_event_id(make_client):
@@ -90,6 +91,21 @@ def test_bad_optional_headers_are_ignored(make_client):
                     headers=capture_headers(**{"X-Trigger": "laser", "X-Detector-Score": "high"}))
     assert r.status_code == 202
     assert client.get(f"/api/v1/events/{r.json()['event_id']}").json()["trigger"] is None
+
+
+def test_event_exposes_sync_fields(make_client, tmp_path):
+    client = make_client(mock_scenario="none_worn")
+    event_id = client.post("/api/v1/captures", content=make_jpeg(), headers=capture_headers()).json()["event_id"]
+    ev = wait_status(client, event_id)
+    assert (ev["sync_attempts"], ev["sync_error"], ev["next_sync_at"]) == (0, None, None)
+
+    # cloud-sync가 남기는 값이 그대로 보인다
+    with db.connect(db.db_path(tmp_path)) as conn:
+        conn.execute("UPDATE events SET status = ?, sync_attempts = 5, sync_error = 'table: 401 bad key' "
+                     "WHERE event_id = ?", (db.UPLOAD_FAILED, event_id))
+    ev = client.get(f"/api/v1/events/{event_id}").json()
+    assert ev["status"] == "upload_failed"
+    assert (ev["sync_attempts"], ev["sync_error"], ev["next_sync_at"]) == (5, "table: 401 bad key", None)
 
 
 def test_unknown_event_404(make_client):
