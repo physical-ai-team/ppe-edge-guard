@@ -35,6 +35,10 @@ ssh <사용자>@ppe-gateway.local
 
 **`.local` 이름이 안 되면** 노트북에서 `arp -a`로 같은 네트워크의 IP 목록을 보고 Pi의 IP를 찾아 `ssh <사용자>@<PI_IP>`로 접속한다. Pi를 켜기 전후의 `arp -a` 결과를 비교하면 새로 생긴 항목이 Pi다. IP를 찾은 뒤 아래 `HostName`에 `.local` 대신 IP를 넣으면 된다.
 
+- 공유기·통신사 DNS에 따라 `ppe-gateway.local`이 **엉뚱한 인터넷 주소로 바뀌는** 경우가 있다(SK 공유기에서 `218.38.x.x`로 바뀌어 접속 시간 초과). `Resolve-DnsName ppe-gateway.local` 결과가 같은 네트워크 주소(예: `192.168.x.x`)가 아니면 IP로 접속한다.
+- Pi MAC 주소를 알면(`ip link show wlan0`) `arp -a`에서 바로 찾을 수 있다. 목록에 없으면 같은 대역에 한 번 접속을 시도해 ARP 표를 채운 뒤 다시 본다.
+- `HostName`을 IP로 바꿀 때 `HostKeyAlias ppe-gateway.local`을 같이 넣으면, IP가 바뀌어도 이미 등록한 Pi 호스트 키를 그대로 쓴다.
+
 ### 노트북 SSH 키 등록 (처음 한 번)
 
 Imager에서 공개키를 넣었더라도 **지금 쓰는 노트북·Windows 계정에 그 개인 키가 없으면** `Permission denied (publickey,password)`가 난다. 이 노트북용 키를 만들어 등록한다. 마지막 명령에서 Pi 비밀번호를 한 번 묻는다.
@@ -78,6 +82,33 @@ timedatectl          # "System clock synchronized: yes" 여야 한다
 ```bash
 hostname -I          # 이 IP를 기록 → ESP32 펌웨어 GATEWAY_HOST, fake_esp32 --url
 ```
+
+### Wi-Fi 추가·변경 (SSH로 원격 작업할 때)
+
+**ESP32(XIAO ESP32S3)는 2.4GHz만 지원한다.** Pi도 같은 공유기의 2.4GHz 네트워크에 붙이면 연결 문제를 따질 일이 줄어든다.
+
+`sudo nmcli --ask device wifi connect '<SSID>'`는 **비밀번호를 묻기 전에 지금 연결을 먼저 끊는다.** 그 연결로 SSH를 쓰고 있으면 SSH가 끊기면서 비밀번호를 입력할 수 없고, `no-secrets`로 실패한 뒤 원래 Wi-Fi로 돌아간다. 그래서 **비밀번호를 먼저 저장하고 연결을 시작한다.**
+
+```bash
+ssh ppe-gateway                                  # 노트북에서 접속한 뒤 Pi 안에서 실행
+sudo nmcli device wifi rescan; nmcli -t -f SSID,FREQ,SIGNAL device wifi list    # SSID와 2.4GHz(24xx MHz) 확인
+
+# 프로필이 없으면 먼저 만든다 (연결은 아직 시작하지 않는다)
+sudo nmcli connection add type wifi ifname wlan0 con-name '<SSID>' ssid '<SSID>' connection.autoconnect yes
+# 비밀번호 저장(화면·기록에 남지 않음) → 연결 시작. 여기서 SSH가 끊기는 게 정상
+read -rsp 'Wi-Fi password: ' P; echo; sudo nmcli connection modify '<SSID>' wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$P"; unset P; sudo nmcli connection up '<SSID>'
+```
+
+노트북도 같은 Wi-Fi로 옮긴 뒤 새 IP를 찾아(위 `arp -a` 방법) `~\.ssh\config`의 `HostName`을 바꾸고 다시 접속한다. 그다음 새 Wi-Fi를 기존 Wi-Fi보다 먼저 쓰게 한다. 기존 Wi-Fi(예: 핫스팟)는 남겨 두면 새 Wi-Fi가 없는 곳에서 자동으로 붙는다.
+
+```bash
+sudo nmcli connection modify '<SSID>' connection.autoconnect-priority 10
+nmcli -t -f NAME,AUTOCONNECT,AUTOCONNECT-PRIORITY connection show
+```
+
+- 비밀번호가 틀리면 `connection up`이 실패하고 Pi는 원래 Wi-Fi에 남는다. SSH가 살아 있으면 같은 줄을 다시 실행한다.
+- 노트북 Wi-Fi 목록에 새 네트워크가 안 보이면(`netsh wlan connect`가 "not available") Wi-Fi를 껐다 켜서 다시 검색시킨다. **노트북이 그 네트워크에 붙을 수 있는지 먼저 확인한 뒤** Pi를 옮긴다. 그렇지 않으면 Pi에 접속할 방법이 없어진다.
+- 옮긴 뒤 IP가 바뀌지 않게 공유기에서 Pi MAC에 **DHCP 예약**을 건다. ESP32 펌웨어에 IP를 넣기 전에 해 둔다.
 
 ## 3. Docker 설치
 
@@ -220,7 +251,8 @@ docker image prune -f                  # 이전 이미지 정리 (SD 용량)
 
 | 증상 | 확인 |
 |---|---|
-| `ppe-gateway.local`을 못 찾음 | 노트북에서 `arp -a`로 Pi IP를 찾아 IP로 접속 ([1단계](#1-os-설치-노트북에서-raspberry-pi-imager)) |
+| `ppe-gateway.local`을 못 찾음, 또는 인터넷 주소로 바뀌어 시간 초과 | 노트북에서 `arp -a`로 Pi IP를 찾아 IP로 접속 ([1단계](#1-os-설치-노트북에서-raspberry-pi-imager)) |
+| Wi-Fi 변경 중 SSH `Connection reset` 후 Pi가 원래 Wi-Fi로 돌아옴 | 비밀번호를 받기 전에 연결이 끊긴 것(`no-secrets`) → [Wi-Fi 추가·변경](#wi-fi-추가변경-ssh로-원격-작업할-때)처럼 비밀번호를 먼저 저장 |
 | SSH `Permission denied (publickey,password)` | 이 노트북에 등록된 키가 없다 → [노트북 SSH 키 등록](#노트북-ssh-키-등록-처음-한-번) |
 | SSH `Host key verification failed` | `known_hosts`에 그 호스트 이름이 없거나 OS를 다시 구움 → 대화형으로 한 번 접속해 등록, 필요하면 `ssh-keygen -R` |
 | 노트북에서 `http://<PI_IP>:8000` 연결 안 됨 | 같은 네트워크인지, Pi에서 `curl localhost:8000/healthz`는 되는지, 공용 Wi-Fi의 기기 간 통신 차단(AP isolation) 여부 |
