@@ -143,6 +143,14 @@ conda run -n ppe-ingest python scripts/fake_esp32.py --count 3 --wait
 curl.exe http://localhost:8000/api/v1/stats
 ```
 
+### 라즈베리파이 (김세광)
+배포 절차는 [docs/deploy_raspberry_pi.md](docs/deploy_raspberry_pi.md)를 따른다.
+```bash
+cd ~/ppe-edge-guard && git pull --ff-only && cd gateway && docker compose up -d --build   # 업데이트 배포
+bash scripts/pi_check.sh        # 시각·메모리·디스크·컨테이너·API 점검 (읽기 전용)
+# Pi에서는 docker compose down -v 금지 (위반 사진 볼륨 삭제)
+```
+
 ### 테스트 (서비스 폴더에서)
 ```powershell
 cd gateway/ingest; conda run -n ppe-ingest python -m pytest -q
