@@ -1,0 +1,7 @@
+# 노트북 개발용 덧붙임 파일. inference를 노트북에서 직접 curl할 때만 쓴다 (Pi에서는 쓰지 않는다).
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up inference
+#   curl.exe http://localhost:8001/healthz
+services:
+  inference:
+    ports:
+      - "${INFERENCE_PORT:-8001}:8001"

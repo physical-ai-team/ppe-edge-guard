@@ -49,22 +49,22 @@ XIAO ESP32S3 (사람 감지 → 고해상도 JPEG)
 | 트랙 | 담당 | 브랜치 | 내용 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
 | G1 | 김세광 | `feat/gateway-ingest` | **최우선.** ingest 컨테이너, compose(ingest), `INFERENCE_MODE=mock`, `fake_esp32.py` | 팀원 노트북에서 `docker compose up ingest`를 실행하고 `fake_esp32.py`로 전송하면 202 응답이 오고, `/api/v1/events/{id}`에서 상태 전이가 확인됨 | ✅ 완료 (PR #3) |
-| F1 | 박민성 | `feat/firmware-capture` | 감지 인터페이스 + 임시 감지(타이머/시리얼), 고해상도 촬영, ① 형식으로 전송, 쿨다운, 재연결, 재시도 | `arduino-cli compile` 성공. G1 이후 노트북 ingest로 202 수신 | 🔄 PR 리뷰 중 (보드 실기 6개 통과) |
-| I1 | 김정윤 | `feat/inference-service` | inference 컨테이너, 공개 사전학습 모델(COCO yolov8n 416), `classes.yaml`, ② 형식 응답 | 노트북에서 단독으로 `curl /infer` 시 계약 형식 응답. 계약 테스트 통과 | ✅ 완료 (PR #10). compose 연동은 김세광 확인 대기 (`gateway/inference/README.md`) |
+| F1 | 박민성 | `feat/firmware-capture` | 감지 인터페이스 + 임시 감지(타이머/시리얼), 고해상도 촬영, ① 형식으로 전송, 쿨다운, 재연결, 재시도 | `arduino-cli compile` 성공. G1 이후 노트북 ingest로 202 수신 | ✅ 완료 (PR #9). 보드 실기 6개 통과 |
+| I1 | 김정윤 | `feat/inference-service` | inference 컨테이너, 공개 사전학습 모델(COCO yolov8n 416), `classes.yaml`, ② 형식 응답 | 노트북에서 단독으로 `curl /infer` 시 계약 형식 응답. 계약 테스트 통과 | ✅ 완료 (PR #10). compose 연동 완료 (김세광, `feat/gateway-compose-inference`) |
 | S1 | 조아람 | `feat/supabase-schema` | `violations` 테이블, private 버킷, RLS, Storage 정책, Auth, `seed.sql` | RLS 확인 체크리스트 통과 (dev-testing.md) | ✅ 완료 (PR #7). Supabase CLI link·db push 사용 |
-| W1 | 조아람 | `feat/web-dashboard` | 로그인, 목록, Realtime, signed URL 사진, GitHub Pages 배포 | seed와 수동 insert가 실시간으로 표시됨 | 🔄 기능 완료 (PR #8), Pages 배포 PR 리뷰 중 (`.github/workflows/pages.yml`) |
-| G2 | 김세광 | `feat/gateway-cloud-sync` | cloud-sync, `SYNC_MODE=dry_run`, 재시도·백오프 | dry_run 통과 후 개발 Supabase에 실제 업로드 | 🔄 dry_run 완료·PR 리뷰 중 (실업로드는 S1 이후) |
-| T1 | 김정윤 | `feat/training-ppe` | Colab 노트북(Roboflow, Colab Secrets), ONNX 640 export, `validate_onnx.py`, 정확도·속도 측정 | 시나리오별 정답률 보고, 모델을 Drive로 공유 | ⏳ |
-| F2 | 박민성 | `feat/firmware-edge-impulse` | EI 데이터 수집·학습, `detector_ei`, EI 라이브러리 설치 문서화 | 실기에서 사람 감지 시 촬영·전송 | 🔄 PR 리뷰 중 (모델 v1.0.44, 시연 영상 5개 중 4개 감지) |
-| V1 | 이기태 | — | 시나리오 5종 검증·시연 영상 (dev-testing.md의 촬영 가이드) | 공유 드라이브에 시나리오별 업로드 | ⏳ |
+| W1 | 조아람 | `feat/web-dashboard` | 로그인, 목록, Realtime, signed URL 사진, GitHub Pages 배포 | seed와 수동 insert가 실시간으로 표시됨 | ✅ 완료 (PR #8, #13). Pages: https://physical-ai-team.github.io/ppe-edge-guard/ |
+| G2 | 김세광 | `feat/gateway-cloud-sync` | cloud-sync, `SYNC_MODE=dry_run`, 재시도·백오프 | dry_run 통과 후 개발 Supabase에 실제 업로드 | ✅ 완료 (PR #5). 2026-11-02 개발 Supabase 실업로드 확인 (Storage → 테이블 upsert, 웹 표시, 비로그인 RLS 차단) |
+| T1 | 김정윤 | `feat/training-ppe` | Colab 노트북(Roboflow, Colab Secrets), ONNX 640 export, `validate_onnx.py`, 정확도·속도 측정 | 시나리오별 정답률 보고, 모델을 Drive로 공유 | ⏸ 학습 모델 미완. 공개 PPE 모델 `yolov8n-ppehf-640-v1`로 대체, 시나리오 평가 완료 (PR #11, #15) |
+| F2 | 박민성 | `feat/firmware-edge-impulse` | EI 데이터 수집·학습, `detector_ei`, EI 라이브러리 설치 문서화 | 실기에서 사람 감지 시 촬영·전송 | ✅ 완료 (PR #14). 모델 v1.0.44, 시연 영상 5개 중 4개 감지 |
+| V1 | 이기태 | — | 시나리오 5종 검증·시연 영상 (dev-testing.md의 촬영 가이드) | 공유 드라이브에 시나리오별 업로드 | ✅ 시나리오 영상 촬영 (I1 평가·F2 인식 시험·시연에 사용) |
 
 ### 2. 통합 마일스톤 (김세광)
-| 마일스톤 | 내용 | 조건 |
-|---|---|---|
-| M1 | 노트북 E2E: fake_esp32 → ingest → inference(사전학습) → cloud-sync → 웹 | G1, I1, G2, S1, W1 |
-| M2 | Pi E2E: 실제 ESP32(임시 감지) → Pi → Supabase → 웹. Pi 속도·메모리 측정 | M1, F1 |
-| M3 | 학습 모델 + EI 펌웨어로 교체 | M2, T1, F2 |
-| M4 | 이기태 영상 기준으로 시나리오별 검증, 시연 리허설, `docs/deploy_raspberry_pi.md` 완성 | M3, V1 |
+| 마일스톤 | 내용 | 조건 | 상태 |
+|---|---|---|---|
+| M1 | 노트북 E2E: fake_esp32 → ingest → inference(사전학습) → cloud-sync → 웹 | G1, I1, G2, S1, W1 | ✅ 2026-11-02. 640 공개 모델로 실제 추론, Supabase 업로드 |
+| M2 | Pi E2E: 실제 ESP32(임시 감지) → Pi → Supabase → 웹. Pi 속도·메모리 측정 | M1, F1 | ✅ 2026-11-02. ESP32 사람 감지 → Pi 640 추론(장당 약 0.25초) → 위반만 Supabase 업로드 |
+| M3 | 학습 모델 + EI 펌웨어로 교체 | M2, T1, F2 | ◐ EI 펌웨어 적용 완료. 학습 모델(T1) 대신 공개 PPE 모델 사용 |
+| M4 | 이기태 영상 기준으로 시나리오별 검증, 시연 리허설, `docs/deploy_raspberry_pi.md` 완성 | M3, V1 | ✅ 시나리오 평가(models/README), 발표 시연 완료, 배포 문서 실측 반영 |
 
 ## 확정된 설계 결정
 
@@ -135,9 +135,10 @@ powershell -File firmware/tests/run_tests.ps1        # 계약 규칙(proto) 단�
 ### 게이트웨이
 ```powershell
 cd gateway; Copy-Item .env.example .env    # 값 채우기 (단독 테스트: DEVICE_TOKEN=dev-token, INFERENCE_MODE=mock, SYNC_MODE=dry_run)
-docker compose up -d --build                # 전체 (현재 ingest, cloud-sync)
+docker compose up -d --build                # 전체 (ingest, inference, cloud-sync). inference는 gateway/models/에 MODEL_PATH의 ONNX 필요
 docker compose up --build ingest            # ingest 단독, 로그 보기
-docker compose logs -f ingest cloud-sync
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build inference   # inference 단독 + localhost:8001 curl
+docker compose logs -f ingest inference cloud-sync
 docker compose exec cloud-sync find /data/sync-dryrun -type f   # dry_run 업로드 결과
 docker compose exec cloud-sync python -m app.requeue            # upload_failed → pending_upload (원인 수정 후)
 docker compose down                         # 정지 (데이터 유지) / down -v: 데이터 볼륨까지 삭제

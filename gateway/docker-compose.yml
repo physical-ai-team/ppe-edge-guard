@@ -1,6 +1,8 @@
 # 실행: cd gateway; Copy-Item .env.example .env (값 채우기); docker compose up -d --build
+# 전체: ESP32 → ingest → inference(POST /infer) → SQLite outbox → cloud-sync → Supabase
+#   - inference는 gateway/models/의 ONNX가 있어야 healthy (MODEL_PATH). 없으면 503 → ingest가 재시도
 # 단독 테스트: .env에 INFERENCE_MODE=mock, SYNC_MODE=dry_run → docker compose up ingest cloud-sync
-# inference(김정윤, 트랙 I1)는 해당 트랙에서 서비스 추가 예정
+# inference 단독 + 노트북에서 curl: docker compose -f docker-compose.yml -f docker-compose.dev.yml up inference
 name: ppe-edge-guard
 
 x-logging: &default-logging
@@ -29,6 +31,28 @@ services:
       interval: 30s
       timeout: 5s
       start_period: 15s
+      retries: 3
+    logging: *default-logging
+    # depends_on을 두지 않는다: INFERENCE_MODE=mock이면 inference 없이 떠야 하고,
+    # http 모드에서 inference가 늦게 뜨거나 내려가도 ingest는 사진을 받고 일시 오류로 재시도한다
+
+  inference:
+    build:
+      context: .
+      dockerfile: inference/Dockerfile
+    image: ppe-edge-guard/inference:dev
+    env_file: .env
+    # 포트는 외부에 열지 않는다 (ingest가 compose 내부망 http://inference:8001로 호출).
+    # 노트북에서 직접 curl할 때만 docker-compose.dev.yml로 8001을 연다
+    volumes:
+      - ./models:/models:ro   # 모델은 이미지·git에 넣지 않는다 (CLAUDE.md 규칙 12). 읽기 전용이라 bind mount 사용
+    restart: unless-stopped
+    mem_limit: 1536m
+    healthcheck:
+      test: ["CMD", "/opt/conda/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
       retries: 3
     logging: *default-logging
 
