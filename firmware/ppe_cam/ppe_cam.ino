@@ -6,6 +6,7 @@
 #include <WiFi.h>
 #include <esp_heap_caps.h>
 
+#include "camera.h"
 #include "net.h"
 #include "proto.h"
 
@@ -20,6 +21,7 @@ void setup() {
   if (!proto_valid_device_id(DEVICE_ID)) {
     Serial.println("[boot] DEVICE_ID 형식 오류 (^[a-z0-9-]{3,32}$) — ingest가 400을 돌려준다");
   }
+  if (!camera_begin()) Serial.println("[boot] camera init failed — 촬영 불가");
   net_begin();
 }
 
