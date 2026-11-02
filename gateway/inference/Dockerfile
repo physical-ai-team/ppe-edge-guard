@@ -13,7 +13,7 @@ COPY --chown=$MAMBA_USER:$MAMBA_USER inference/app /app/app
 
 ENV PYTHONPATH=/app \
     PYTHONUNBUFFERED=1 \
-    MODEL_PATH=/models/yolov8n-ppehf-416-v1.onnx \
+    MODEL_PATH=/models/yolov8n-ppehf-640-v1.onnx \
     MODEL_CLASSES=/models/classes.yaml
 
 EXPOSE 8001
