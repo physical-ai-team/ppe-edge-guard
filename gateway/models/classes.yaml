@@ -1,20 +1,30 @@
-# 모델별 원본 클래스 → 정규화 5종(person helmet no_helmet vest no_vest) 매핑.
+# 모델별 원본 클래스 → 정규화 5종(person helmet no_helmet vest no_vest) 매핑 + 사람별 판정 규칙.
 # docs/interfaces.md "정규화 클래스 이름" 참고. 매핑은 인덱스가 아니라 이름 기준이다.
 #
-# inference는 MODEL_PATH 파일명(확장자 제외)을 키로 아래 항목을 찾는다.
+# inference는 MODEL_PATH 파일명(확장자 제외)을 키로 models 아래 항목을 찾는다.
 #   /models/yolov8n-ppehf-416-v1.onnx → models.yolov8n-ppehf-416-v1
 # 키 = model_version = 응답의 model_version.
 #
-# source_names: 모델 출력 인덱스 순서 그대로의 원본 이름 (export 스크립트가 체크포인트와 대조)
-# canonical:    원본 이름 → 정규화 이름. 여기 없는 원본 클래스는 응답에서 제외한다.
+# 원본 클래스 이름·순서는 ONNX 메타데이터(ultralytics export)에서 읽는다.
+#   source_names: (선택) 있으면 ONNX 메타데이터와 이름·순서가 같은지 검사한다. 다르면 모델을 로드하지 않는다.
+#   canonical:    원본 이름 → 정규화 이름. 여기 없는 원본 클래스는 응답에서 제외한다.
+#   matching:     (선택) 아래 기본 matching을 모델별로 덮어쓴다.
+# 입력 크기는 ONNX 입력 shape를 따른다.
+
+# 사람 박스 ↔ 안전모/조끼 박스 매칭 (gateway/inference/app/ppe.py)
+matching:
+  # PPE 박스 면적 중 사람 박스 안에 들어간 비율이 이 값 이상이어야 그 사람 것으로 본다
+  min_containment: 0.5
+  # PPE 박스 중심의 세로 위치 범위. 사람 박스 위쪽 끝 = 0, 아래쪽 끝 = 1 (안전모는 머리 위로 약간 나갈 수 있음)
+  helmet_region: [-0.15, 0.4]
+  vest_region: [0.1, 0.85]
 
 models:
   # 공개 PPE 모델 (Hugging Face, MIT). Roboflow "Construction Site Safety" 10클래스와 같은 이름·순서.
   # 출처: https://huggingface.co/Hansung-Cho/yolov8-ppe-detection @ ac0027bd38bc
-  # 생성: python training/export_hf_model.py
+  # 생성: python training/export_hf_model.py [--imgsz 640]
   # 원 모델은 imgsz 640으로 학습됨(30 epochs). 팀 기준 416으로 export해서 쓴다. 640은 비교용.
   yolov8n-ppehf-416-v1:
-    imgsz: 416
     source_names: &ppehf_names
       - Hardhat
       - Mask
@@ -34,13 +44,11 @@ models:
       Person: person
 
   yolov8n-ppehf-640-v1:
-    imgsz: 640
     source_names: *ppehf_names
     canonical: *ppehf_canonical
 
-  # COCO 사전학습 (I1 임시). 사람만 감지 → helmet/vest는 항상 unknown.
+  # COCO 사전학습 (I1 임시). 사람만 감지 → helmet/vest는 항상 unknown, violation은 항상 false.
+  # 생성: python training/export_coco_model.py
   yolov8n-coco-416-v1:
-    imgsz: 416
-    source_names_note: COCO 80클래스 (인덱스 0 = person)
     canonical:
       person: person
