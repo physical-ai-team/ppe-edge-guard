@@ -10,16 +10,18 @@
 #include <img_converters.h>
 
 #include EI_HEADER
+#include "edge-impulse-sdk/dsp/image/image.hpp"
 
 #include "detector.h"
 
-static uint8_t *rgb_full = nullptr;   // DETECT 해상도 RGB888 (PSRAM)
-static uint8_t *rgb_model = nullptr;  // 모델 입력 크기 RGB888
+// DETECT 해상도 RGB888 (PSRAM). 축소도 이 버퍼 안에서 한다: crop_and_interpolate_rgb888은 dst에 먼저
+// 잘라낸 크기(QVGA면 240x240x3)로 쓴 뒤 줄이므로, dst를 모델 크기로 잡으면 넘쳐서 힙이 깨진다.
+static uint8_t *rgb = nullptr;
 static uint32_t last_infer_ms = 0;
 static int hits = 0;
 
-// EI SDK 기본 ei_calloc은 정렬이 보장되지 않아 코어 3.x에서 힙이 깨진다(zero-touch 교훈).
-// SDK의 weak 정의를 16바이트 정렬 할당으로 덮어쓴다.
+// EI SDK(espressif 포팅) 기본 ei_calloc은 IDF 5.x(코어 3.x)에서 정렬 없는 heap_caps_calloc이라 esp-nn에서 힙이 깨진다
+// (zero-touch 교훈, espressif/esp-nn#7). SDK의 weak 정의를 16바이트 정렬 할당으로 덮어쓴다.
 void *ei_malloc(size_t size) { return heap_caps_aligned_alloc(16, size, MALLOC_CAP_8BIT); }
 void *ei_calloc(size_t nitems, size_t size) {
   return heap_caps_aligned_calloc(16, nitems, size, MALLOC_CAP_8BIT);
@@ -27,7 +29,7 @@ void *ei_calloc(size_t nitems, size_t size) {
 void ei_free(void *ptr) { heap_caps_free(ptr); }
 
 static int get_signal_data(size_t offset, size_t length, float *out) {
-  const uint8_t *p = rgb_model + offset * 3;
+  const uint8_t *p = rgb + offset * 3;
   for (size_t i = 0; i < length; i++, p += 3) {
     out[i] = (float)((p[0] << 16) | (p[1] << 8) | p[2]);  // fmt2rgb888 출력은 RGB 순서. 뒤집지 않는다
   }
@@ -35,8 +37,6 @@ static int get_signal_data(size_t offset, size_t length, float *out) {
 }
 
 void detector_begin() {
-  rgb_model = (uint8_t *)heap_caps_malloc(EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT * 3,
-                                          MALLOC_CAP_8BIT);
   Serial.printf("[det] edge impulse %dx%d, threshold=%.2f, interval=%dms, hits=%d\n",
                 EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, (double)PERSON_THRESHOLD,
                 DETECT_INTERVAL_MS, DETECT_CONSECUTIVE);
@@ -46,18 +46,22 @@ bool detector_wants_frame() { return millis() - last_infer_ms >= DETECT_INTERVAL
 
 // 사람 점수(0~1). 실패하면 음수
 static float infer_person(camera_fb_t *frame) {
-  size_t full_len = (size_t)frame->width * frame->height * 3;
-  static size_t full_cap = 0;
-  if (full_cap < full_len) {
-    heap_caps_free(rgb_full);
-    rgb_full = (uint8_t *)heap_caps_malloc(full_len, MALLOC_CAP_SPIRAM);
-    full_cap = rgb_full ? full_len : 0;
+  size_t len = (size_t)frame->width * frame->height * 3;
+  static size_t cap = 0;
+  if (cap < len) {
+    heap_caps_free(rgb);
+    rgb = (uint8_t *)heap_caps_malloc(len, MALLOC_CAP_SPIRAM);
+    cap = rgb ? len : 0;
   }
-  if (!rgb_full || !rgb_model) return -1.0f;
-  if (!fmt2rgb888(frame->buf, frame->len, frame->format, rgb_full)) return -1.0f;
+  if (!rgb) return -1.0f;
+  if (!fmt2rgb888(frame->buf, frame->len, frame->format, rgb)) return -1.0f;
 
-  ei::image::processing::crop_and_interpolate_rgb888(rgb_full, frame->width, frame->height, rgb_model,
-                                                     EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT);
+  // 가운데를 정사각형으로 잘라 모델 크기로 줄인다 (같은 버퍼 안에서)
+  if (ei::image::processing::crop_and_interpolate_rgb888(rgb, frame->width, frame->height, rgb,
+                                                         EI_CLASSIFIER_INPUT_WIDTH,
+                                                         EI_CLASSIFIER_INPUT_HEIGHT) != 0) {
+    return -1.0f;
+  }
 
   ei::signal_t signal;
   signal.total_length = EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT;
