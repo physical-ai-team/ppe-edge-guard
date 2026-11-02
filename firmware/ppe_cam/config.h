@@ -40,7 +40,7 @@
 #endif
 
 #ifndef PERSON_THRESHOLD
-#define PERSON_THRESHOLD 0.4f  // FOMO person 점수 기준. 놓치는 것보다 오탐이 낫다(Pi가 거름)
+#define PERSON_THRESHOLD 0.3f  // FOMO person 점수 기준(모델 min_score도 이 값으로 바꾼다). 놓치는 것보다 오탐이 낫다(Pi가 거름)
 #endif
 
 #ifndef DETECT_INTERVAL_MS

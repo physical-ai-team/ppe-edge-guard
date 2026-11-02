@@ -11,6 +11,7 @@
 
 #include EI_HEADER
 #include "edge-impulse-sdk/dsp/image/image.hpp"
+#include "edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_thresholds.h"
 
 #include "detector.h"
 
@@ -37,6 +38,10 @@ static int get_signal_data(size_t offset, size_t length, float *out) {
 }
 
 void detector_begin() {
+  // 모델 안의 FOMO 기준(EI 기본 0.5) 아래 점수는 박스로 나오지도 않는다. PERSON_THRESHOLD까지 내려야 효과가 있다.
+  EI_IMPULSE_ERROR r = set_threshold_postprocessing(&ei_default_impulse.impulse->postprocessing_blocks[0],
+                                                    "min_score", PERSON_THRESHOLD);
+  if (r != EI_IMPULSE_OK) Serial.printf("[det] set min_score failed (%d), model default used\n", (int)r);
   Serial.printf("[det] edge impulse %dx%d, threshold=%.2f, interval=%dms, hits=%d\n",
                 EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, (double)PERSON_THRESHOLD,
                 DETECT_INTERVAL_MS, DETECT_CONSECUTIVE);
