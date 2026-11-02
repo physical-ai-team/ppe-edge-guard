@@ -1,0 +1,39 @@
+# ===== 비밀값 (절대 커밋 금지) =====
+.env
+.env.*
+!.env.example
+firmware/**/secrets.h
+web/config.js
+
+# ===== 모델 / 데이터 (용량 큼, 볼륨으로 관리) =====
+gateway/models/*.onnx
+gateway/models/*.pt
+*.pt
+data/
+gateway/data/
+
+# ===== 펌웨어 빌드 산출물 / Edge Impulse 라이브러리 zip =====
+firmware/**/build/
+firmware/**/*.bin
+firmware/**/*.elf
+firmware/lib/*.zip
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# ===== 학습 (Colab 산출물을 로컬로 받은 경우) =====
+training/runs/
+training/datasets/
+training/*.onnx
+.ipynb_checkpoints/
+
+# ===== OS / 에디터 =====
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

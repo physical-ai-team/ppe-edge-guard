@@ -1,0 +1,14 @@
+# 노트북(CPU)에서 export된 ONNX 모델을 검증하는 용도. 학습 자체는 Colab에서 수행.
+name: ppe-training
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - onnxruntime>=1.17
+  - numpy>=1.26
+  - pillow>=10
+  - pyyaml>=6
+  - matplotlib
+  - pip
+  - pip:
+      - ultralytics>=8.2   # 결과 비교/시각화용 (CPU torch 설치됨)
