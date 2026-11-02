@@ -1,7 +1,7 @@
 # 라즈베리파이 5 게이트웨이 배포 (초안)
 
-> **상태: 초안 — M2 준비 단계. 1차 실측 완료 (2026-11-02, [측정 기록](#측정-기록)).** 지금은 ingest(`INFERENCE_MODE=mock`) + cloud-sync(`SYNC_MODE=dry_run`)만 Pi에 올린다.
-> inference(I1), 실제 Supabase 업로드(S1), 실제 ESP32(F1)가 붙을 때마다 이 문서를 갱신하고, M4에서 완성한다.
+> **상태: M2 완료 (2026-11-02, [측정 기록](#측정-기록)).** 실제 ESP32 → Pi(ingest + inference 640 + cloud-sync) → Supabase → 웹까지 이 문서대로 배포해 확인했다.
+> 1~8단계는 처음 mock + dry_run으로 기준을 잡는 절차다. 실제 운영 설정(inference, Supabase)은 [다음 단계](#다음-단계에서-추가할-내용)를 따른다.
 > 담당: 김세광 (Pi는 김세광만 가지고 있다).
 
 명령은 모두 **Pi의 SSH 셸(bash)** 기준이다. 노트북(PowerShell)에서 실행하는 명령은 따로 표시한다.
@@ -219,6 +219,7 @@ conda run -n ppe-ingest python gateway/scripts/fake_esp32.py --url http://<PI_IP
 | 날짜 | 커밋 | 구성 | 첫 빌드 시간 | 유휴 메모리 (ingest / cloud-sync) | 전송 테스트 | 50장 중 최대 메모리 / CPU (ingest · cloud-sync) | 온도·스로틀 | 비고 |
 |---|---|---|---|---|---|---|---|---|
 | 2026-11-02 | `2ae62a9` | ingest mock + cloud-sync dry_run. Pi OS Lite 64-bit (Debian 13 trixie, kernel 6.18.50), Docker 29.9.2, Compose v5.6.1, microSD(루트 57GB), Wi-Fi | **201초** (3분 21초, Docker 설치 약 1분 별도) | 58 / 46 MiB | 10장 `--wait`: 202 10/10, 14초. 50장 0.5초 간격: 202 50/50, 34초. dry_run 업로드 누락 0 | 53 / 46 MiB · 2.5% / 1.1% | 최고 53°C, `0x0` | memory cgroup을 켠 뒤 측정. 켜기 전에는 `docker stats`가 0B라 호스트 RSS로 잼(ingest 66, cloud-sync 60 MiB). 재부팅 후 수동 조작 없이 두 컨테이너 `healthy`, 데이터 유지 |
+| 2026-11-02 | `8be7222` | **ingest http + inference(`yolov8n-ppehf-640-v1`) + cloud-sync supabase** (M2). 같은 Pi, 집 Wi-Fi | 124초 (inference 이미지 추가) | 52 / 50 MiB, inference 97 MiB | 실제 ESP32 사람 감지 촬영: 202, 전송 0.6~1.2초. Pi 판정 장당 233~251ms. 6장 중 위반 1장만 Supabase 업로드 | inference 160 MiB (제한 1.5 GiB) · 추론 중 CPU 약 270%(스레드 3) | 69.7°C, **`0x50000`** | `/infer` 640 단독 20회: 810×1080 203ms, 1280×720 205ms, ESP32 1280×1024 226ms (전처리 약 75 + 모델 약 150ms). `0x50000` = 추론 부하 중 **전압 부족** 발생 → 27W 공식 어댑터 필요 |
 
 ## 8. 재부팅 자동 시작 확인
 
@@ -265,7 +266,9 @@ docker image prune -f                  # 이전 이미지 정리 (SD 용량)
 
 ## 다음 단계에서 추가할 내용
 
-- [ ] inference 컨테이너(I1): `models/` 배포(공유 드라이브 → `gateway/models/`), `INFERENCE_MODE=http`, 추론 속도·메모리, 스왑 크기 결정
-- [ ] 실제 업로드(S1 이후): `SYNC_MODE=supabase`, 웹에서 실시간 표시 확인
-- [ ] 실제 ESP32(F1 이후): `GATEWAY_HOST` 설정, 전송 시간, 쿨다운
-- [ ] 카메라 거치 위치·각도, 시연장 네트워크 (M4)
+- [x] inference 컨테이너(I1): 모델은 노트북에서 `training/export_hf_model.py`로 만들어 `scp`로 `gateway/models/`에 복사(해시 비교), `INFERENCE_MODE=http`, 640 속도·메모리 측정. 스왑은 2GB 기본값으로 충분(사용 0)
+- [x] 실제 업로드(S1 이후): Pi `.env`에 `SYNC_MODE=supabase` + secret 키(`chmod 600`), 위반만 업로드 확인
+- [x] 실제 ESP32(F1·F2 이후): `GATEWAY_HOST=<Pi IP>`, 사람 감지 촬영 → Pi → Supabase (M2)
+- [ ] 전원: 27W 공식 어댑터로 바꾼 뒤 `vcgencmd get_throttled`가 `0x0`인지 재확인
+- [ ] 공유기 DHCP 예약으로 Pi IP 고정 (ESP32 펌웨어에 IP가 들어가 있다)
+- [ ] 학습 모델(T1)로 교체 시: `.env`의 `MODEL_PATH`만 바꾸고 `docker compose up -d inference`
