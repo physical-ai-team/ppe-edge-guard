@@ -30,9 +30,10 @@
 #define DETECTOR_TIMER_MS 0  // 0이면 꺼짐. 예: 15000 → 15초마다 자동 촬영 (X-Trigger: timer)
 #endif
 
-// F2 사람 감지 (Edge Impulse). 0이면 detector_manual(시리얼·타이머), 1이면 detector_ei
+// F2 사람 감지 (Edge Impulse). 1이면 detector_ei(EI 라이브러리 설치 필요, firmware/README.md),
+// 0이면 detector_manual(시리얼·타이머, 라이브러리 없이 빌드)
 #ifndef DETECTOR_EI
-#define DETECTOR_EI 0
+#define DETECTOR_EI 1
 #endif
 
 #ifndef EI_HEADER
@@ -64,5 +65,5 @@
 #endif
 
 #ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "0.1.0"
+#define FIRMWARE_VERSION "0.2.0"  // 0.2: F2 사람 감지
 #endif

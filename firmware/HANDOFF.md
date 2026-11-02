@@ -19,11 +19,14 @@
 - [ ] PR(`feat/firmware-capture` → main, 리뷰어 김세광). 본문: 변경 내용, 검증(단위 시험·컴파일·실기 6개·측정값), 영향(없음 — 계약 그대로, CLAUDE.md는 규칙 15 범위). CLAUDE.md F1 상태는 `🔄 PR 리뷰 중`으로 바꿔 둠.
 - 참고: `WiFi.reconnect()`는 연결 시도 중이면 아무것도 안 해서 공유기가 꺼졌다 켜지면 영영 안 붙었다 → F2 브랜치에서 `disconnect()+begin()`(15초 간격)으로 고침, 실기로 자동 재연결 확인.
 
-**F2 (`feat/firmware-edge-impulse`) — Draft PR, 보드에서 사람 감지 → 전송 동작 확인**
+**F2 (`feat/firmware-edge-impulse`) — PR #14 리뷰 중, 모델 v1.0.44 확정**
 - [x] `detector_ei.cpp` (DETECTOR_EI 스위치), `build.ps1 -InstallLib`, README "사람 감지 (F2)" 절. 실기: v1.0.43 모델로 사람 앞에서 `trig=person` → ingest 202 → cloud-sync dry_run 업로드까지 (2026-11-02).
 - [x] 시연 영상(V1, AI 생성 Veo 3.1, 5개×8초) → 3 fps 프레임 120장 → EI 업로드 → AI labeling(OWL-ViT, `A person (person, 0.2)`) → 재학습 → v1.0.44. 시연 장면 test 100%, 전체 test 54.8%(P 0.92, R 0.57, test 세트가 바뀌어 이전 63%와 직접 비교 불가).
-- [ ] v1.0.44를 보드에서 사람 앞에 서서 v1.0.43과 점수 비교 → 좋은 쪽 확정. zip 둘 다 `C:\dev\ppe-data\`(git 밖)에 있음 → 팀 공유 드라이브에 올리기.
-- [ ] 확정 후 `config.h` `DETECTOR_EI` 기본값 1로, Draft 해제(리뷰어 김세광). F1(PR #9) 머지가 먼저.
+- [x] **v1.0.44로 확정** (발표가 가까워 비교 생략). 시연 영상 화면 재촬영 시 5개 중 4개 촬영, helmet_only는 못 잡음 → README "시연 영상 인식". PERSON_THRESHOLD 0.3(모델 min_score도 바꿈). zip 둘 다 `C:\dev\ppe-data\`(git 밖)에 있음 → 팀 공유 드라이브에 올리기.
+- [x] `DETECTOR_EI` 기본값 1, fw 0.2.0, PR #14 리뷰 요청(김세광). F1(PR #9) 머지가 먼저.
+- [ ] 모델 zip `C:\dev\ppe-data\ei-ppe-person-fomo-arduino-1.0.44.zip`을 팀 공유 드라이브에 올리기 (사람이 직접)
+- [ ] (선택) helmet_only를 꼭 잡아야 하면 타이머 병행 또는 보드 카메라로 찍은 화면 영상 추가 학습
+- [ ] (선택) "Wi-Fi 연결됨인데 통신 안 됨" 상태를 한 번 봤다(리셋으로 회복). 전송 4회 실패(code=-1)가 이어지면 Wi-Fi 재시작하는 처리 고려
 - [ ] 더 필요하면: 시연 장소에서 보드로 찍은 사진(`c`) 추가 학습 — AI 영상과 보드 카메라 화질 차이가 큼.
 - [ ] Edge Impulse 임시 Public 프로젝트 `tmp-121370-import`(ID 1154360) 삭제 (사람이 직접)
 - 데이터 위치: 영상·프레임·zip은 `C:\dev\ppe-data\` (저장소 밖, 규칙 13).
