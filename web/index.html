@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PPE Edge Guard 관제</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- 로그인 화면 -->
+  <section id="login-view" class="login hidden">
+    <form id="login-form" class="card login-card">
+      <h1>PPE Edge Guard</h1>
+      <p class="muted">산업 안전 관제 대시보드</p>
+      <input id="email" type="email" placeholder="이메일" required autocomplete="username" />
+      <input id="password" type="password" placeholder="비밀번호" required autocomplete="current-password" />
+      <button type="submit">로그인</button>
+      <p id="login-error" class="error"></p>
+    </form>
+  </section>
+
+  <!-- 대시보드 -->
+  <section id="app-view" class="hidden">
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">⛑</span>
+        <strong>PPE Edge Guard</strong>
+        <span id="live" class="live off">● 연결 중</span>
+      </div>
+      <div class="right">
+        <span id="user-email" class="muted"></span>
+        <button id="logout" class="ghost">로그아웃</button>
+      </div>
+    </header>
+
+    <main>
+      <h2 class="section-title">오늘 위반 현황 <span id="today" class="muted"></span></h2>
+      <div class="stats">
+        <div class="card stat bad"><span>위반 건수</span><b id="s-total">-</b></div>
+        <div class="card stat warn"><span>안전모 미착용</span><b id="s-nohelmet">-</b></div>
+        <div class="card stat warn"><span>조끼 미착용</span><b id="s-novest">-</b></div>
+        <div class="card stat"><span>둘 다 미착용</span><b id="s-both">-</b></div>
+        <div class="card stat"><span>감지 인원</span><b id="s-persons">-</b></div>
+        <div class="card stat"><span>마지막 위반</span><b id="s-last">-</b></div>
+      </div>
+
+      <div class="toolbar">
+        <h2 class="section-title">위반 기록</h2>
+        <div class="filters">
+          <div class="seg" id="kind-filter">
+            <button data-v="all" class="active">전체</button>
+            <button data-v="helmet">안전모</button>
+            <button data-v="vest">조끼</button>
+          </div>
+          <select id="device-filter"><option value="">모든 카메라</option></select>
+        </div>
+      </div>
+
+      <div class="card table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>촬영 시각</th><th>카메라</th><th>위반 내용</th><th>인원</th>
+              <th>판단불가</th><th>모델 · 추론</th><th>사진</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <p id="empty" class="muted empty hidden">위반 기록이 없습니다.</p>
+      </div>
+      <button id="more" class="ghost more hidden">더 보기</button>
+    </main>
+  </section>
+
+  <!-- 사진 확대 + 사람 박스 -->
+  <dialog id="photo">
+    <div class="photo-wrap">
+      <img id="photo-img" alt="위반 사진" />
+      <svg id="photo-boxes" preserveAspectRatio="none"></svg>
+    </div>
+    <p id="photo-caption"></p>
+    <p class="legend"><span class="lg bad"></span>미착용 <span class="lg ok"></span>모두 착용 <span class="lg unk"></span>판단불가 포함</p>
+    <form method="dialog"><button>닫기</button></form>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
