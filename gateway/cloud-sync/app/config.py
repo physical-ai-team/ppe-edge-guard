@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     sync_poll_interval_sec: float = Field(2.0, gt=0)
     sync_max_backoff_sec: float = Field(300.0, gt=0)
     sync_timeout_sec: float = Field(30.0, gt=0)
+    sync_max_permanent_failures: int = Field(5, ge=1)
     sync_batch_size: int = Field(20, ge=1)
 
     @model_validator(mode="after")

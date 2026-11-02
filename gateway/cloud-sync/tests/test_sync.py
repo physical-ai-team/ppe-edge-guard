@@ -196,6 +196,102 @@ def test_supabase_table_failure_retries_whole_upload(make_settings, add_event, g
     assert calls == {"storage": 2, "table": 2}  # 사진 재업로드는 upsert라 멱등
 
 
+# ---------- v1.2: 영구 오류 → upload_failed ----------
+
+def _run_until_settled(worker, get_event, event_id, rounds):
+    """next_sync_at을 기다리지 않고 바로 다음 시도를 돌린다."""
+    for _ in range(rounds):
+        ev = get_event(event_id)
+        if ev["status"] != db.PENDING_UPLOAD:
+            break
+        now = parse_iso(ev["next_sync_at"]) if ev["next_sync_at"] else None
+        asyncio.run(worker.sync_due(now=now))
+    return get_event(event_id)
+
+
+@pytest.mark.parametrize("code,permanent", [
+    (400, True), (401, True), (403, True), (404, True), (409, True), (422, True),
+    (408, False), (429, False), (500, False), (502, False), (503, False),
+])
+def test_status_classification(make_settings, add_event, get_event, code, permanent):
+    event_id = add_event()
+    worker = _supabase_worker(make_settings(), lambda r: httpx.Response(code, text="x"))
+    asyncio.run(worker.sync_due())
+    ev = get_event(event_id)
+    assert ev["status"] == db.PENDING_UPLOAD
+    assert ev["sync_permanent_failures"] == int(permanent)
+
+
+def test_permanent_errors_mark_upload_failed_after_limit(make_settings, add_event, get_event, tmp_path):
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        return httpx.Response(401, json={"message": "Invalid API key"})
+
+    event_id = add_event()
+    worker = _supabase_worker(make_settings(sync_max_permanent_failures=3), handler)
+    ev = _run_until_settled(worker, get_event, event_id, rounds=10)
+    assert ev["status"] == db.UPLOAD_FAILED
+    assert ev["sync_attempts"] == 3 and ev["sync_permanent_failures"] == 3
+    assert ev["sync_error"].startswith("storage: 401") and ev["next_sync_at"] is None
+    assert len(calls) == 3
+    # 재시도 중단: 더 이상 가져가지 않는다
+    assert asyncio.run(worker.sync_due(now=utcnow() + timedelta(days=1))) == 0
+    # 사진은 로컬에 남는다
+    assert (tmp_path / "images" / ev["image_path"]).exists()
+
+
+def test_missing_image_marks_upload_failed_after_limit(make_settings, add_event, get_event):
+    event_id = add_event(write_image=False)
+    worker = _dry_worker(make_settings())  # 기본 5회
+    ev = _run_until_settled(worker, get_event, event_id, rounds=10)
+    assert ev["status"] == db.UPLOAD_FAILED
+    assert ev["sync_permanent_failures"] == 5 and ev["sync_error"] == "image_missing"
+
+
+def test_transient_errors_retry_forever(make_settings, add_event, get_event):
+    event_id = add_event()
+    worker = _supabase_worker(make_settings(sync_max_permanent_failures=2),
+                              lambda r: httpx.Response(503, text="down"))
+    ev = _run_until_settled(worker, get_event, event_id, rounds=20)
+    assert ev["status"] == db.PENDING_UPLOAD
+    assert ev["sync_attempts"] == 20 and ev["sync_permanent_failures"] == 0
+
+
+def test_only_permanent_failures_count_toward_limit(make_settings, add_event, get_event):
+    codes = iter([503, 503, 503, 404, 429, 404])  # 영구 2회, 일시 4회
+
+    def handler(request):
+        return httpx.Response(next(codes, 200))
+
+    event_id = add_event()
+    worker = _supabase_worker(make_settings(sync_max_permanent_failures=3), handler)
+    ev = _run_until_settled(worker, get_event, event_id, rounds=10)
+    assert ev["status"] == db.UPLOADED
+
+
+def test_requeue_upload_failed(make_settings, add_event, get_event, tmp_path, monkeypatch, capsys):
+    from app import requeue
+
+    failed = [add_event(status=db.UPLOAD_FAILED, sync_permanent_failures=5, sync_attempts=5) for _ in range(2)]
+    other = add_event(status=db.UPLOADED)
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+
+    requeue.main([failed[0]])
+    assert get_event(failed[0])["status"] == db.PENDING_UPLOAD
+    assert get_event(failed[0])["sync_permanent_failures"] == 0
+    assert get_event(failed[1])["status"] == db.UPLOAD_FAILED
+
+    requeue.main([])
+    assert "requeued 1" in capsys.readouterr().out.splitlines()[-1]
+    assert get_event(failed[1])["status"] == db.PENDING_UPLOAD
+    assert get_event(other)["status"] == db.UPLOADED
+
+    asyncio.run(_dry_worker(make_settings()).sync_due())
+    assert all(get_event(e)["status"] == db.UPLOADED for e in failed)
+
+
 # ---------- 서비스 ----------
 
 def test_healthz_and_background_worker(make_settings, add_event, get_event):

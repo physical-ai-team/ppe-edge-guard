@@ -5,6 +5,10 @@ SYNC_MODE=dry_run  : Supabase 대신 DATA_DIR/sync-dryrun/ 아래에 같은 경�
 
 두 단계 모두 멱등이다. 중간에 실패하면 처음부터 다시 해도 결과가 같다.
 순서는 항상 사진 → 행이다 (웹이 사진 없는 행을 보지 않도록).
+
+오류 분류 (docs/interfaces.md v1.2):
+  일시 오류 — 연결 실패, 타임아웃, 5xx, 408, 429, dry_run 쓰기 실패 → 무한 재시도
+  영구 오류 — 그 밖의 4xx (잘못된 키·버킷·테이블·본문) → SYNC_MAX_PERMANENT_FAILURES회 후 upload_failed
 """
 import json
 import os
@@ -19,8 +23,19 @@ from .config import Settings
 TABLE = "violations"
 
 
+_TRANSIENT_4XX = (408, 429)
+
+
 class UploadError(Exception):
-    """업로드 실패. 모든 실패는 백오프 후 재시도한다 (pending_upload 사진은 버리지 않는다)."""
+    """업로드 실패. permanent=False면 무한 재시도, True면 횟수 제한 후 upload_failed."""
+
+    def __init__(self, message: str, permanent: bool = False):
+        super().__init__(message)
+        self.permanent = permanent
+
+
+def is_permanent_status(status_code: int) -> bool:
+    return 400 <= status_code < 500 and status_code not in _TRANSIENT_4XX
 
 
 class Uploader(Protocol):
@@ -62,7 +77,7 @@ class SupabaseUploader:
         except httpx.HTTPError as e:
             raise UploadError(f"{step}: {type(e).__name__}: {e}") from e
         if r.status_code >= 300:
-            raise UploadError(f"{step}: {r.status_code} {r.text[:200]}")
+            raise UploadError(f"{step}: {r.status_code} {r.text[:200]}", permanent=is_permanent_status(r.status_code))
 
     async def aclose(self) -> None:
         await self._client.aclose()

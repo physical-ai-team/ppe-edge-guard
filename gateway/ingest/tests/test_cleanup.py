@@ -66,6 +66,31 @@ def test_cap_deletes_disposable_first_then_uploaded_never_pending(make_settings)
         assert result["stored_bytes"] == 3 * MB
 
 
+def test_upload_failed_never_deleted_and_counted(make_settings):
+    settings = _setup(make_settings, local_image_max_mb=1, violation_retention_days=7)
+    with db.connect(db.db_path(settings.data_dir)) as conn:
+        failed = [_add(conn, settings, f"upfail-{i}", db.UPLOAD_FAILED, 30, uploaded_age_days=None) for i in range(2)]
+        result = run_cleanup(conn, settings, now=NOW)
+        assert result["expired"] == 0 and result["over_cap"] == 0
+        assert all(p.exists() for p in failed)
+        assert result["upload_failed"] == 2
+        assert result["stored_bytes"] == 2 * MB  # 상한(1MB)을 넘어도 지우지 않는다
+
+
+def test_init_db_migrates_v1_schema(tmp_path):
+    path = db.db_path(tmp_path)
+    with db.connect(path) as conn:  # v1 스키마 (sync_permanent_failures 없음)
+        conn.executescript(db._SCHEMA.replace(
+            "sync_permanent_failures INTEGER NOT NULL DEFAULT 0,   -- v2: 영구 오류(4xx, 사진 없음) 횟수\n", ""))
+        conn.execute("PRAGMA user_version=1")
+        assert "sync_permanent_failures" not in {r["name"] for r in conn.execute("PRAGMA table_info(events)")}
+    db.init_db(path)
+    db.init_db(path)  # 두 번 불러도 안전 (ingest·cloud-sync 동시 시작)
+    with db.connect(path) as conn:
+        assert "sync_permanent_failures" in {r["name"] for r in conn.execute("PRAGMA table_info(events)")}
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
+
+
 def test_cap_stops_once_under_limit(make_settings):
     settings = _setup(make_settings, local_image_max_mb=2, violation_retention_days=30)
     with db.connect(db.db_path(settings.data_dir)) as conn:

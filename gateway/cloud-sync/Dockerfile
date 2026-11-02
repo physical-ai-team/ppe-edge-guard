@@ -15,7 +15,9 @@ WORKDIR /app
 COPY --chown=$MAMBA_USER:$MAMBA_USER common/ppe_common /app/ppe_common
 COPY --chown=$MAMBA_USER:$MAMBA_USER cloud-sync/app /app/app
 
-ENV PYTHONPATH=/app \
+# PATH: `docker compose exec cloud-sync python -m app.requeue`는 micromamba 엔트리포인트를 거치지 않는다
+ENV PATH=/opt/conda/bin:$PATH \
+    PYTHONPATH=/app \
     PYTHONUNBUFFERED=1 \
     DATA_DIR=/data
 

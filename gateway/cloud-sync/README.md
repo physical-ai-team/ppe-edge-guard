@@ -64,8 +64,16 @@ Supabase 호출은 `httpx.MockTransport`로 대체해서 요청 경로·헤더·
 
 - **순서**: Storage 업로드가 성공해야 테이블 upsert를 한다. 웹이 사진 없는 행을 보지 않게 하기 위해서다.
 - **멱등성**: 사진은 결정적 경로에 `x-upsert: true`, 행은 `event_id` 기준 upsert다. 중간에 실패하면 처음부터 다시 올려도 결과가 같다.
-- **재시도**: 모든 실패(연결 오류, 5xx, 4xx 설정 오류 포함)는 1→2→4…초 간격으로 재시도하고, 간격은 `SYNC_MAX_BACKOFF_SEC`를 넘지 않는다. 횟수 제한은 없다. `pending_upload` 사진은 버리지 않는다.
-  - 실패 횟수·오류·다음 시도 시각은 `events.sync_attempts`, `sync_error`, `next_sync_at`에 남는다.
-  - 사진 파일이 없으면(`image_missing`) 행만 올리지 않고 ERROR 로그를 남긴 채 재시도로 둔다. 정상이라면 일어나지 않는다(ingest cleanup은 `pending_upload` 사진을 지우지 않음).
+- **재시도**: 실패하면 1→2→4…초 간격으로 재시도하고, 간격은 `SYNC_MAX_BACKOFF_SEC`를 넘지 않는다.
+  - **일시 오류**(연결 실패, 타임아웃, 5xx, 408, 429, dry_run 쓰기 실패): 횟수 제한 없음.
+  - **영구 오류**(그 밖의 4xx — 잘못된 키·버킷·테이블·본문, 사진 파일 없음 `image_missing`): `SYNC_MAX_PERMANENT_FAILURES`회(기본 5)째에 `upload_failed`로 바꾸고 멈춘다. 일시 오류는 이 횟수에 세지 않는다.
+  - 기록: `events.sync_attempts`(전체), `sync_permanent_failures`, `sync_error`, `next_sync_at`. ingest `GET /api/v1/events/{id}`로 볼 수 있다.
+  - 사진 파일이 없으면 행만 올리지 않는다. 정상이라면 일어나지 않는다(ingest cleanup은 `pending_upload` 사진을 지우지 않음).
+- **upload_failed 복구**: 사진은 로컬에 남고 ingest cleanup이 지우지 않는다(건수가 바뀔 때 ingest 경고 로그). 원인을 고친 뒤 다시 큐에 넣는다.
+
+  ```powershell
+  docker compose exec cloud-sync python -m app.requeue              # upload_failed 전체
+  docker compose exec cloud-sync python -m app.requeue <event_id>   # 하나만
+  ```
 - **로컬 사진**: 업로드 후에도 지우지 않는다. 보관 기간 정리는 ingest cleanup이 `uploaded_at` 기준으로 한다.
 - 이벤트는 `received_at` 순서대로 하나씩 올린다(배치 `SYNC_BATCH_SIZE`=20). 할 일이 없으면 `SYNC_POLL_INTERVAL_SEC`마다 확인한다.

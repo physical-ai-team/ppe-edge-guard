@@ -73,6 +73,7 @@ XIAO ESP32S3 (사람 감지 → 고해상도 JPEG)
   - ingest 워커가 inference에 `POST /infer`(**JPEG 바이트를 직접 전송**, 공유 볼륨 경로 아님)를 보낸다.
   - 결과가 위반이면 `pending_upload`, 아니면 `compliant`로 기록한다.
   - cloud-sync가 `pending_upload`를 폴링해서 업로드한다. 성공하면 `uploaded`, 실패하면 지수 백오프로 재시도한다.
+  - 네트워크·5xx·타임아웃·429는 무한 재시도한다. 그 밖의 4xx와 사진 파일 없음은 영구 오류로 보고, `SYNC_MAX_PERMANENT_FAILURES`회(기본 5) 쌓이면 `upload_failed`로 바꾸고 재시도를 멈춘다(interfaces.md v1.2).
   - SQLite(WAL)는 named volume `gateway-data`에 둔다. Windows bind mount에서는 파일 잠금이 불안정하므로 bind mount를 쓰지 않는다.
 - **시각:**
   - 모든 시각은 UTC로 다룬다. DB와 Storage 경로도 UTC이고, KST 변환은 웹 화면 표시에서만 한다.
@@ -87,7 +88,7 @@ XIAO ESP32S3 (사람 감지 → 고해상도 JPEG)
   - 착용자 사진은 추론 직후 삭제한다. `DEBUG_KEEP_COMPLIANT=true`면 보관한다(기본 off).
   - 업로드 완료된 위반 사진은 `VIOLATION_RETENTION_DAYS`(기본 7일)이 지나면 삭제한다.
   - 사진 폴더가 `LOCAL_IMAGE_MAX_MB`를 넘으면 디버그 보관 착용자 사진, 업로드 완료 위반 사진 순서로 오래된 것부터 삭제한다.
-  - `pending_upload` 사진은 절대 삭제하지 않는다. 용량이 넘쳐도 경고 로그만 남긴다.
+  - `pending_upload`·`upload_failed` 사진은 절대 삭제하지 않는다. 용량이 넘쳐도 경고 로그만 남긴다.
 - **모델:**
   - YOLOv8n, 입력 416. 데이터셋은 Roboflow "Construction Site Safety"다.
   - Colab에서 Roboflow API 키는 Colab Secrets(`ROBOFLOW_API_KEY`)에서 읽는다.
@@ -134,6 +135,7 @@ docker compose up -d --build                # 전체 (현재 ingest, cloud-sync)
 docker compose up --build ingest            # ingest 단독, 로그 보기
 docker compose logs -f ingest cloud-sync
 docker compose exec cloud-sync find /data/sync-dryrun -type f   # dry_run 업로드 결과
+docker compose exec cloud-sync python -m app.requeue            # upload_failed → pending_upload (원인 수정 후)
 docker compose down                         # 정지 (데이터 유지) / down -v: 데이터 볼륨까지 삭제
 
 # 가짜 ESP32 전송 (ppe-ingest 환경)
@@ -151,7 +153,8 @@ cd gateway/cloud-sync; conda run -n ppe-cloud-sync python -m pytest -q
 - 서비스 코드는 `gateway/<service>/app/`, 공용 코드는 `gateway/common/ppe_common/`(SQLite outbox 스키마, 상태 상수, 시각·경로 규칙)에 둔다.
 - import 경로는 Docker에서 `PYTHONPATH=/app`이고, 공용 코드는 `/app/ppe_common`에 복사된다. 로컬에서는 `PYTHONPATH=..\common`으로 맞춘다. 테스트는 `pytest.ini`의 `pythonpath`로 처리한다.
 - Dockerfile 빌드 컨텍스트는 `gateway/`다. 이미지는 `mambaorg/micromamba:2.0.5`를 쓰고 `mambauser`로 실행한다.
-- 이벤트 상태 전이: `received → inferring → compliant | pending_upload → uploaded`, 영구 오류는 `infer_failed`. 정의는 `ppe_common/db.py`에 있다.
+- 이벤트 상태 전이: `received → inferring → compliant | pending_upload → uploaded | upload_failed`, 추론 영구 오류는 `infer_failed`. 정의는 `ppe_common/db.py`에 있다.
+- 스키마를 바꾸면 `ppe_common/db.py`의 `SCHEMA_VERSION`을 올리고, 기존 볼륨용 컬럼 추가는 `_MIGRATIONS`에 넣는다.
 
 ## 규칙
 
