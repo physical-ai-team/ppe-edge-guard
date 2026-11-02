@@ -3,7 +3,9 @@
 상태 전이 (docs/interfaces.md):
     received → inferring → compliant | pending_upload → uploaded
                          ↘ infer_failed (영구 오류: 손상 이미지, 파일 없음)
+                                                     ↘ upload_failed (영구 오류 SYNC_MAX_PERMANENT_FAILURES회)
     일시 오류(inference 다운 등)는 received로 되돌리고 next_infer_at까지 대기한다.
+    업로드 일시 오류(네트워크·5xx·타임아웃·429)는 pending_upload 그대로 next_sync_at까지 대기한다.
 """
 import sqlite3
 from contextlib import contextmanager
@@ -16,8 +18,9 @@ COMPLIANT = "compliant"
 PENDING_UPLOAD = "pending_upload"
 UPLOADED = "uploaded"
 INFER_FAILED = "infer_failed"
+UPLOAD_FAILED = "upload_failed"
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
@@ -55,6 +58,7 @@ CREATE TABLE IF NOT EXISTS events (
 
     -- cloud-sync 사용
     sync_attempts         INTEGER NOT NULL DEFAULT 0,
+    sync_permanent_failures INTEGER NOT NULL DEFAULT 0,   -- v2: 영구 오류(4xx, 사진 없음) 횟수
     next_sync_at          TEXT,
     sync_error            TEXT,
     uploaded_at           TEXT,
@@ -84,9 +88,26 @@ def connect(path: Path) -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+# v1 DB(이미 만들어진 gateway-data 볼륨)에 추가할 컬럼
+_MIGRATIONS = (
+    ("sync_permanent_failures", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+
 def init_db(path: Path) -> None:
+    """ingest·cloud-sync 둘 다 시작할 때 호출한다. 동시에 호출돼도 안전하다."""
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     with connect(path) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.executescript(_SCHEMA)
-        conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            existing = {r["name"] for r in conn.execute("PRAGMA table_info(events)")}
+            for name, decl in _MIGRATIONS:
+                if name not in existing:
+                    conn.execute(f"ALTER TABLE events ADD COLUMN {name} {decl}")
+            conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise

@@ -48,12 +48,12 @@ XIAO ESP32S3 (사람 감지 → 고해상도 JPEG)
 
 | 트랙 | 담당 | 브랜치 | 내용 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
-| G1 | 김세광 | `feat/gateway-ingest` | **최우선.** ingest 컨테이너, compose(ingest), `INFERENCE_MODE=mock`, `fake_esp32.py` | 팀원 노트북에서 `docker compose up ingest`를 실행하고 `fake_esp32.py`로 전송하면 202 응답이 오고, `/api/v1/events/{id}`에서 상태 전이가 확인됨 | 🔄 PR 리뷰 중 |
+| G1 | 김세광 | `feat/gateway-ingest` | **최우선.** ingest 컨테이너, compose(ingest), `INFERENCE_MODE=mock`, `fake_esp32.py` | 팀원 노트북에서 `docker compose up ingest`를 실행하고 `fake_esp32.py`로 전송하면 202 응답이 오고, `/api/v1/events/{id}`에서 상태 전이가 확인됨 | ✅ 완료 (PR #3) |
 | F1 | 박민성 | `feat/firmware-capture` | 감지 인터페이스 + 임시 감지(타이머/시리얼), 고해상도 촬영, ① 형식으로 전송, 쿨다운, 재연결, 재시도 | `arduino-cli compile` 성공. G1 이후 노트북 ingest로 202 수신 | ⏳ |
 | I1 | 김정윤 | `feat/inference-service` | inference 컨테이너, 공개 사전학습 모델(COCO yolov8n 416), `classes.yaml`, ② 형식 응답 | 노트북에서 단독으로 `curl /infer` 시 계약 형식 응답. 계약 테스트 통과 | ⏳ |
 | S1 | 조아람 | `feat/supabase-schema` | `violations` 테이블, private 버킷, RLS, Storage 정책, Auth, `seed.sql` | RLS 확인 체크리스트 통과 (dev-testing.md) | ⏳ |
 | W1 | 조아람 | `feat/web-dashboard` | 로그인, 목록, Realtime, signed URL 사진, GitHub Pages 배포 | seed와 수동 insert가 실시간으로 표시됨 | ⏳ (S1 이후) |
-| G2 | 김세광 | `feat/gateway-cloud-sync` | cloud-sync, `SYNC_MODE=dry_run`, 재시도·백오프 | dry_run 통과 후 개발 Supabase에 실제 업로드 | ⏳ (G1 이후, 실업로드는 S1 이후) |
+| G2 | 김세광 | `feat/gateway-cloud-sync` | cloud-sync, `SYNC_MODE=dry_run`, 재시도·백오프 | dry_run 통과 후 개발 Supabase에 실제 업로드 | 🔄 dry_run 완료·PR 리뷰 중 (실업로드는 S1 이후) |
 | T1 | 김정윤 | `feat/training-ppe` | Colab 노트북(Roboflow, Colab Secrets), ONNX 416 export, `validate_onnx.py`, 정확도·속도 측정 | 시나리오별 정답률 보고, 모델을 Drive로 공유 | ⏳ |
 | F2 | 박민성 | `feat/firmware-edge-impulse` | EI 데이터 수집·학습, `detector_ei`, EI 라이브러리 설치 문서화 | 실기에서 사람 감지 시 촬영·전송 | ⏳ (F1 이후) |
 | V1 | 이기태 | — | 시나리오 5종 검증·시연 영상 (dev-testing.md의 촬영 가이드) | 공유 드라이브에 시나리오별 업로드 | ⏳ |
@@ -73,6 +73,7 @@ XIAO ESP32S3 (사람 감지 → 고해상도 JPEG)
   - ingest 워커가 inference에 `POST /infer`(**JPEG 바이트를 직접 전송**, 공유 볼륨 경로 아님)를 보낸다.
   - 결과가 위반이면 `pending_upload`, 아니면 `compliant`로 기록한다.
   - cloud-sync가 `pending_upload`를 폴링해서 업로드한다. 성공하면 `uploaded`, 실패하면 지수 백오프로 재시도한다.
+  - 네트워크·5xx·타임아웃·429는 무한 재시도한다. 그 밖의 4xx와 사진 파일 없음은 영구 오류로 보고, `SYNC_MAX_PERMANENT_FAILURES`회(기본 5) 쌓이면 `upload_failed`로 바꾸고 재시도를 멈춘다(interfaces.md v1.2).
   - SQLite(WAL)는 named volume `gateway-data`에 둔다. Windows bind mount에서는 파일 잠금이 불안정하므로 bind mount를 쓰지 않는다.
 - **시각:**
   - 모든 시각은 UTC로 다룬다. DB와 Storage 경로도 UTC이고, KST 변환은 웹 화면 표시에서만 한다.
@@ -87,7 +88,7 @@ XIAO ESP32S3 (사람 감지 → 고해상도 JPEG)
   - 착용자 사진은 추론 직후 삭제한다. `DEBUG_KEEP_COMPLIANT=true`면 보관한다(기본 off).
   - 업로드 완료된 위반 사진은 `VIOLATION_RETENTION_DAYS`(기본 7일)이 지나면 삭제한다.
   - 사진 폴더가 `LOCAL_IMAGE_MAX_MB`를 넘으면 디버그 보관 착용자 사진, 업로드 완료 위반 사진 순서로 오래된 것부터 삭제한다.
-  - `pending_upload` 사진은 절대 삭제하지 않는다. 용량이 넘쳐도 경고 로그만 남긴다.
+  - `pending_upload`·`upload_failed` 사진은 절대 삭제하지 않는다. 용량이 넘쳐도 경고 로그만 남긴다.
 - **모델:**
   - YOLOv8n, 입력 416. 데이터셋은 Roboflow "Construction Site Safety"다.
   - Colab에서 Roboflow API 키는 Colab Secrets(`ROBOFLOW_API_KEY`)에서 읽는다.
@@ -129,10 +130,12 @@ arduino-cli upload  --fqbn <FQBN> -p <PORT> firmware/ppe_cam   # <PORT>는 각�
 
 ### 게이트웨이
 ```powershell
-cd gateway; Copy-Item .env.example .env    # 값 채우기 (단독 테스트: DEVICE_TOKEN=dev-token, INFERENCE_MODE=mock)
-docker compose up -d --build                # 전체 (현재 ingest만 있음)
+cd gateway; Copy-Item .env.example .env    # 값 채우기 (단독 테스트: DEVICE_TOKEN=dev-token, INFERENCE_MODE=mock, SYNC_MODE=dry_run)
+docker compose up -d --build                # 전체 (현재 ingest, cloud-sync)
 docker compose up --build ingest            # ingest 단독, 로그 보기
-docker compose logs -f ingest
+docker compose logs -f ingest cloud-sync
+docker compose exec cloud-sync find /data/sync-dryrun -type f   # dry_run 업로드 결과
+docker compose exec cloud-sync python -m app.requeue            # upload_failed → pending_upload (원인 수정 후)
 docker compose down                         # 정지 (데이터 유지) / down -v: 데이터 볼륨까지 삭제
 
 # 가짜 ESP32 전송 (ppe-ingest 환경)
@@ -143,13 +146,15 @@ curl.exe http://localhost:8000/api/v1/stats
 ### 테스트 (서비스 폴더에서)
 ```powershell
 cd gateway/ingest; conda run -n ppe-ingest python -m pytest -q
+cd gateway/cloud-sync; conda run -n ppe-cloud-sync python -m pytest -q
 ```
 
 ### gateway Python 코드 구조
 - 서비스 코드는 `gateway/<service>/app/`, 공용 코드는 `gateway/common/ppe_common/`(SQLite outbox 스키마, 상태 상수, 시각·경로 규칙)에 둔다.
 - import 경로는 Docker에서 `PYTHONPATH=/app`이고, 공용 코드는 `/app/ppe_common`에 복사된다. 로컬에서는 `PYTHONPATH=..\common`으로 맞춘다. 테스트는 `pytest.ini`의 `pythonpath`로 처리한다.
 - Dockerfile 빌드 컨텍스트는 `gateway/`다. 이미지는 `mambaorg/micromamba:2.0.5`를 쓰고 `mambauser`로 실행한다.
-- 이벤트 상태 전이: `received → inferring → compliant | pending_upload → uploaded`, 영구 오류는 `infer_failed`. 정의는 `ppe_common/db.py`에 있다.
+- 이벤트 상태 전이: `received → inferring → compliant | pending_upload → uploaded | upload_failed`, 추론 영구 오류는 `infer_failed`. 정의는 `ppe_common/db.py`에 있다.
+- 스키마를 바꾸면 `ppe_common/db.py`의 `SCHEMA_VERSION`을 올리고, 기존 볼륨용 컬럼 추가는 `_MIGRATIONS`에 넣는다.
 
 ## 규칙
 

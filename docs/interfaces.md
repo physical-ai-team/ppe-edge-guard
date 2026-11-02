@@ -1,6 +1,8 @@
-# 서비스 간 인터페이스 계약 (v1.1)
+# 서비스 간 인터페이스 계약 (v1.2)
 
 > **상태: 확정 (2026-11-02, 팀 합의).** 이후 변경은 영향받는 담당자 전원의 PR 승인이 필요하다. 계약 변경 PR이 먼저 머지된 뒤 코드 변경을 올린다. 버전 규칙: 필드 추가 = 마이너(v1.1), 필드 삭제·의미 변경 = 메이저(v2.0).
+
+> **최근 변경 — v1.2 (2026-11-02)**: 게이트웨이 로컬 상태에 `upload_failed` 추가. 업로드 영구 오류(429를 제외한 4xx, 사진 파일 없음)가 `SYNC_MAX_PERMANENT_FAILURES`회(기본 5) 쌓이면 재시도를 멈추고, 그 사진은 로컬 정리 대상에서 빠진다. 네트워크·5xx·타임아웃·408·429는 지금처럼 무한 재시도. `/api/v1/events/{id}`에 `sync_attempts`·`sync_error`·`next_sync_at` 추가. **Supabase 스키마·웹·ESP32·inference 형식 변경 없음.** 전체 이력은 [맨 아래](#변경-이력).
 
 이 문서는 담당자들이 **서로의 코드나 라즈베리파이 없이 병렬 개발**할 수 있도록 경계를 고정한다. 구현은 자유지만, 아래 형식은 지켜야 한다.
 
@@ -178,15 +180,22 @@ curl.exe -X POST http://localhost:8000/api/v1/captures `
   "image": { "width": 1280, "height": 1024, "bytes": 184322, "deleted": false },
   "infer_attempts": 1,
   "last_error": null,
+  "sync_attempts": 1,
+  "sync_error": "storage: 503 Service Unavailable",
+  "next_sync_at": "2026-11-02T05:31:15Z",
   "uploaded_at": null,
   "result": { "...": "② inference 응답 전체 (추론 전이면 null)" }
 }
 ```
-- `status`: `received` → `inferring` → `compliant` | `pending_upload` → `uploaded`
-  - 일시 오류: `received`로 돌아가서 재시도한다.
-  - 영구 오류(손상 이미지, 파일 없음): `infer_failed`
+- `status`: `received` → `inferring` → `compliant` | `pending_upload` → `uploaded` | `upload_failed`
+  - 추론 일시 오류: `received`로 돌아가서 재시도한다.
+  - 추론 영구 오류(손상 이미지, 파일 없음): `infer_failed`
+  - 업로드 일시 오류(연결 실패, 타임아웃, 5xx, 408, 429): `pending_upload`를 유지하고 백오프로 **무한 재시도**한다.
+  - 업로드 영구 오류(429·408을 제외한 4xx, 사진 파일 없음): `SYNC_MAX_PERMANENT_FAILURES`회(기본 5) 쌓이면 `upload_failed`로 바꾸고 재시도를 멈춘다. 일시 오류 횟수는 이 한도에 세지 않는다.
+  - `upload_failed` 사진은 **로컬 정리(보관 기간·용량 상한) 대상에서 제외**하고 경고 로그를 남긴다. 원인을 고친 뒤 `docker compose exec cloud-sync python -m app.requeue [event_id]`로 `pending_upload`에 되돌린다.
 - `image.deleted`: 로컬 사진이 정리되었는지. 착용자 사진 즉시 삭제, 보관 기간 경과, 용량 상한 초과로 정리된다. 기록은 남는다.
 - `infer_attempts` / `last_error`: inference 호출 횟수와 마지막 오류 메시지(성공하면 `null`)
+- `sync_attempts` / `sync_error` / `next_sync_at`: 업로드 시도 횟수(일시·영구 합계), 마지막 업로드 오류(성공하면 `null`), 다음 재시도 예정 시각(대기 중이 아니면 `null`)
 - 없는 ID: `404 {"error": "not_found", "detail": "..."}`
 
 `GET /api/v1/stats`의 `since`가 ISO 8601 형식이 아니면 `400 {"error": "invalid_query", "detail": "..."}`를 반환한다(형식은 아래 "unknown 통계" 참고).
@@ -302,7 +311,7 @@ curl.exe -X POST http://localhost:8001/infer -H "Content-Type: image/jpeg" --dat
   "since": "2026-11-01T00:00:00Z",
   "device_id": "cam-01",
   "events": 412,
-  "by_status": { "compliant": 350, "pending_upload": 2, "uploaded": 55, "infer_failed": 5 },
+  "by_status": { "compliant": 350, "pending_upload": 2, "uploaded": 54, "upload_failed": 1, "infer_failed": 5 },
   "persons": 498,
   "violations": 57,
   "unknown_helmet_count": 31,
@@ -401,3 +410,4 @@ upsert 키: `on_conflict=event_id`. 순서: **Storage 업로드 성공 → 테�
 | v0.1 | 2026-11-02 | 초안 |
 | v1.0 | 2026-11-02 | 팀 확정. `received_at`·`clock_synced` 추가, 해상도를 펌웨어 설정으로 이동, 클래스 매핑표, `unknown_*_count` + `GET /api/v1/stats`, 모델 버전 이름 `yolov8n-ppe-416-v1` |
 | v1.1 | 2026-11-02 | ingest 구현(G1)에 맞춰 디버그용 필드 추가: `/healthz`의 `inference_mode`, `/api/v1/events/{id}`의 `capture_id`·`detected_at`·`trigger`·`image.deleted`·`infer_attempts`·`last_error`·`uploaded_at`, 404 `not_found`, stats의 400 `invalid_query`. 2024년 이전 `X-Captured-At`도 시계 오류로 처리. 선택 헤더가 잘못돼도 무시만 하고 거부하지 않는 원칙 명시. inference 응답의 추가 필드 허용(mock의 `mock_scenario`). **기존 필드 변경 없음** |
+| v1.2 | 2026-11-02 | 업로드 오류 분류: 연결 실패·타임아웃·5xx·408·429는 무한 재시도, 그 밖의 4xx·사진 파일 없음은 영구 오류로 `SYNC_MAX_PERMANENT_FAILURES`회(기본 5) 후 새 상태 `upload_failed`(재시도 중단, 로컬 정리 제외, 경고 로그, `app.requeue`로 수동 복구). `/api/v1/events/{id}`에 `sync_attempts`·`sync_error`·`next_sync_at` 추가. **기존 필드 변경 없음, Supabase·웹·ESP32·inference 영향 없음** |
