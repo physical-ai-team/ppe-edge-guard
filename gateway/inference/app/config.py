@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore", protected_namespaces=())
 
     log_level: str = "INFO"
-    model_path: Path = Path("/models/yolov8n-ppehf-416-v1.onnx")
+    model_path: Path = Path("/models/yolov8n-ppehf-640-v1.onnx")
     model_classes: Path = Path("/models/classes.yaml")
     infer_imgsz: int | None = None  # 참고용. 실제 입력 크기는 ONNX 입력 shape를 따른다
     conf_threshold: float = Field(0.40, gt=0, lt=1)
