@@ -19,6 +19,10 @@ const fmtTime = new Intl.DateTimeFormat("ko-KR", {
 const fmtClock = new Intl.DateTimeFormat("ko-KR", {
   timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false,
 });
+const fmtHms = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+});
+const fmtMd = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric" });
 function todayStartKST() {
   const d = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
   return { label: d, iso: new Date(`${d}T00:00:00+09:00`).toISOString() };
@@ -155,7 +159,7 @@ function renderRow(row, imgUrl) {
   const model = [row.model_version, row.inference_ms != null && Math.round(row.inference_ms) + "ms"]
     .filter(Boolean).join(" · ");
   tr.innerHTML = `
-    <td>${fmtTime.format(new Date(row.captured_at))}${clockWarn}</td>
+    <td><span class="t">${fmtHms.format(new Date(row.captured_at))}</span><span class="d">${fmtMd.format(new Date(row.captured_at))}</span>${clockWarn}</td>
     <td>${esc(row.device_id)}</td>
     <td>${violationTags(row)}</td>
     <td>${row.person_count}</td>
@@ -215,12 +219,24 @@ function insertSorted(tr) {
   $("empty").classList.add("hidden");
 }
 
+// 새 위반 알림 (화면 오른쪽 아래, 5초)
+function toast(row) {
+  const missing = [row.missing_helmet && "안전모", row.missing_vest && "조끼"].filter(Boolean).join(", ");
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.innerHTML = `⚠ <span><b>새 위반</b> · ${esc(row.device_id)} · ${missing} 미착용</span>`;
+  $("toasts").append(el);
+  setTimeout(() => el.classList.add("out"), 4700);
+  setTimeout(() => el.remove(), 5000);
+}
+
 function subscribe() {
   state.channel = supabase
     .channel("violations")
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "violations" }, async ({ new: row }) => {
       addDevice(row.device_id);
       loadStats();
+      toast(row);
       if (!matchesFilters(row)) return;
       const urls = await signedUrls([row]);
       const tr = renderRow(row, urls[row.image_path]);
@@ -230,6 +246,6 @@ function subscribe() {
     .subscribe((status) => {
       const on = status === "SUBSCRIBED";
       $("live").className = "live " + (on ? "on" : "off");
-      $("live").textContent = on ? "● 실시간" : "● 연결 끊김";
+      $("live").textContent = on ? "실시간" : "연결 끊김";
     });
 }

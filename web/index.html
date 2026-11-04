@@ -4,12 +4,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>PPE Edge Guard 관제</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <!-- 로그인 화면 -->
   <section id="login-view" class="login hidden">
     <form id="login-form" class="card login-card">
+      <span class="logo">⛑</span>
       <h1>PPE Edge Guard</h1>
       <p class="muted">산업 안전 관제 대시보드</p>
       <input id="email" type="email" placeholder="이메일" required autocomplete="username" />
@@ -25,7 +27,7 @@
       <div class="brand">
         <span class="logo">⛑</span>
         <strong>PPE Edge Guard</strong>
-        <span id="live" class="live off">● 연결 중</span>
+        <span id="live" class="live off">연결 중</span>
       </div>
       <div class="right">
         <span id="user-email" class="muted"></span>
@@ -36,7 +38,7 @@
     <main>
       <h2 class="section-title">오늘 위반 현황 <span id="today" class="muted"></span></h2>
       <div class="stats">
-        <div class="card stat bad"><span>위반 건수</span><b id="s-total">-</b></div>
+        <div class="card stat bad hero"><span>위반 건수</span><b id="s-total">-</b></div>
         <div class="card stat warn"><span>안전모 미착용</span><b id="s-nohelmet">-</b></div>
         <div class="card stat warn"><span>조끼 미착용</span><b id="s-novest">-</b></div>
         <div class="card stat"><span>둘 다 미착용</span><b id="s-both">-</b></div>
@@ -82,6 +84,9 @@
     <p class="legend"><span class="lg bad"></span>미착용 <span class="lg ok"></span>모두 착용 <span class="lg unk"></span>판단불가 포함</p>
     <form method="dialog"><button>닫기</button></form>
   </dialog>
+
+  <!-- 새 위반 알림 -->
+  <div id="toasts" aria-live="polite"></div>
 
   <script type="module" src="app.js"></script>
 </body>
